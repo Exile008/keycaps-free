@@ -1,0 +1,21 @@
+# Task T3 — UI shell, 3D viewer, 2D diagrams, zh/en i18n  (agent: **DeepSeek**)
+
+You build the browser front-end of an offline keycap generator. **Read `docs/SPEC.md` fully (especially §1, §2, §3, §4.1, §8).**
+The geometry/legend/export modules are written by other agents in parallel. **Code against the contracts in SPEC — do not create or edit `js/keycap.js`, `js/params.js`, `js/legend-core.js`, `js/svg-legend.js`, `js/export.js`, `js/manifold-loader.js`.** If one of those files doesn't exist yet when you test, show a translated "core module missing" status instead of crashing (dynamic `import()` with try/catch in `main.js`).
+
+## Files you own
+`index.html`, `css/style.css`, `js/i18n.js`, `js/viewer.js`, `js/topview.js`, `js/main.js`, `README.md` (bilingual: 中文 first, then English; how to start with `start.bat`, feature list, parameter explanations with the coordinate conventions from SPEC §4, credits: vostoklabs original idea, zk_phi article, three.js, manifold-3d, opentype.js, fflate, fonts OFL).
+
+## Requirements
+1. **Offline**: no external URLs anywhere (no Google Fonts, no CDN, no remote images). Use system font stack. Icons as inline SVG.
+2. Import map exactly as SPEC §2. All JS are ES modules.
+3. **Layout & look**: replicate the original's 3-column layout (top bar, left sidebar params, centre viewport, right sidebar legend/export), its control style (label / slider / number / unit grid rows, iOS-style toggles, segmented tabs, section headers with reset buttons, sticky export footer), dark default + light theme. Make it polished and responsive down to 1280 px wide; below 1000 px stack sidebars under the viewport.
+4. **Controls** per SPEC §8, generated from `PARAM_RANGES` in `js/params.js` where possible (min/max/step), so slider ranges stay in sync with the core. Slider ⇄ number input two-way bound. "Symmetric L/R" link toggle for top insets. Show derived top size `tw × td mm` (from `computeLayout`).
+5. **viewer.js** per the viewer contract in SPEC §8 (three.js r186; Z-up model; crease normals; soft lighting; grid; Iso/Top/Front/Side buttons; resize observer; keep camera when parts update, `frame()` only on first load or size change).
+6. **topview.js**: `createTopView(container) → { update(layout, params) }` drawing inline SVG: (a) top view — bottom footprint rect (with rBottom), top face rect projected (with rTop), stem markers (+ for MX), labels 前/后/左/右 (or F/B/L/R in English), dimension text for the four insets; (b) side profile Y–Z showing bottom line, top line with tilt angle text, height. Scale to fit, re-render on `langchange`.
+7. **i18n.js** per the contract in SPEC §8. Provide complete `zh` and `en` dictionaries for: every label, tooltip (`?` badges explaining each parameter — explain insets vs extension clearly, tilt sign convention, dish types, legend modes, stem tolerance), status messages, warnings `warn.*` (topTooSmall, dishTooDeep, tooThin, innerInvalid, legendOverflow, legendEmpty, legendUnavailable, glyphMissing), errors `err.*` (coreMissing, wasmLoad, fontLoad, svgNoShapes, svgParse, buildFailed, projectLoad), help modal content, file dialogs. Chinese should be natural Simplified Chinese keyboard-community terminology (键帽、轴心/十字轴、卫星轴、碟形凹面、裙边、行高 R1–R4、透光、嵌入双色、凹刻、凸起). Language toggle button in top bar.
+8. **main.js**: single state object `{ params, legendSource, customFonts, uploadedSvgs, lang, theme }`; on change → `normalizeParams` → debounced (120 ms) `buildModel(wasm, params, legendCS, {quality:'preview'})` → `meshData` → `viewer.setParts` + `topview.update` + warnings chips + stats. Legend CS cache: rebuild contours only when the legend source changes; refit on placement change. Exports rebuild at `quality:'export'`. Save/Load project JSON. Persist last session (params + legend text, not uploaded files) to `localStorage['kcg-last']`. Keyboard: Ctrl+S saves project.
+9. Accessibility basics: labels bound to inputs, focus styles, `aria-label`s translated.
+
+## Done when
+With `start.bat` running, `http://localhost:8765/` loads with no console errors; all controls render in both languages; if core modules exist the keycap renders and updates live. Write `docs/REPORT-T3.md` (what you built, screenshots description, any contract mismatches found → also in `docs/QUESTIONS.md`).

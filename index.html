@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title data-i18n="app.title">键帽生成器 · Keycap Generator</title>
+<link rel="stylesheet" href="./css/style.css" />
+<link rel="icon" href="data:," />
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+</head>
+<body>
+
+<!-- ============================= TOP BAR ============================= -->
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 3h10a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <path d="M8.2 8.2h7.6v7.6H8.2z" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>
+      <path d="M12 9.2v5.6M9.2 12h5.6" stroke="currentColor" stroke-width="1.1" opacity=".8"/>
+    </svg>
+    <div class="brand-text">
+      <strong data-i18n="app.title">键帽生成器</strong>
+      <span data-i18n="app.subtitle">参数化 3D 键帽生成器 · 离线运行</span>
+    </div>
+  </div>
+
+  <div class="topbar-actions">
+    <button id="btn-lang" class="btn btn-ghost" type="button" data-i18n-title="tip.lang">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M2.5 9h19M2.5 15h19M12 2c2.6 2.7 4 6.3 4 10s-1.4 7.3-4 10c-2.6-2.7-4-6.3-4-10s1.4-7.3 4-10z" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+      <span id="lang-label">EN</span>
+    </button>
+    <button id="btn-theme" class="btn btn-ghost" type="button" data-i18n-title="tip.theme">
+      <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 2.6v2.6M12 18.8v2.6M2.6 12h2.6M18.8 12h2.6M5.2 5.2l1.8 1.8M17 17l1.8 1.8M18.8 5.2L17 7M7 17l-1.8 1.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+    </button>
+    <button id="btn-help" class="btn btn-ghost" type="button" data-i18n-title="tip.help">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9.5 9.4a2.6 2.6 0 1 1 3.3 2.9c-.7.3-1 .8-1 1.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="17" r="1.05" fill="currentColor"/></svg>
+    </button>
+  </div>
+</header>
+
+<!-- ============================= MAIN LAYOUT ============================= -->
+<main class="layout">
+
+  <!-- ------------------------- LEFT: PARAMS ------------------------- -->
+  <aside class="sidebar left" id="left-sidebar">
+
+    <section class="card" data-section="profile">
+      <header class="card-head">
+        <h2 data-i18n="sec.profile">剖面预设</h2>
+        <span id="preset-badge" class="preset-badge" aria-live="polite" hidden></span>
+        <span class="approx" data-i18n="preset.approx">近似值</span>
+        <button class="reset" type="button" data-reset="profile" data-i18n-title="btn.reset" aria-label="reset">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.4h4.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </header>
+      <div class="card-body" id="profile-body"></div>
+    </section>
+
+    <section class="card" data-section="size">
+      <header class="card-head">
+        <h2 data-i18n="sec.size">尺寸</h2>
+        <button class="reset" type="button" data-reset="size" data-i18n-title="btn.reset" aria-label="reset">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.4h4.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </header>
+      <div class="card-body" id="size-body"></div>
+    </section>
+
+    <section class="card" data-section="topface">
+      <header class="card-head">
+        <h2 data-i18n="sec.topface">顶面内缩</h2>
+        <button class="reset" type="button" data-reset="topface" data-i18n-title="btn.reset" aria-label="reset">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.4h4.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </header>
+      <div class="card-body" id="topface-body"></div>
+    </section>
+
+    <section class="card" data-section="ext">
+      <header class="card-head">
+        <h2 data-i18n="sec.ext">底面延伸</h2>
+        <button class="reset" type="button" data-reset="ext" data-i18n-title="btn.reset" aria-label="reset">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.4h4.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </header>
+      <div class="card-body" id="ext-body"></div>
+    </section>
+
+    <section class="card" data-section="height">
+      <header class="card-head">
+        <h2 data-i18n="sec.height">高度与倾斜</h2>
+        <button class="reset" type="button" data-reset="height" data-i18n-title="btn.reset" aria-label="reset">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.4h4.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </header>
+      <div class="card-body" id="height-body"></div>
+    </section>
+
+    <section class="card" data-section="corners">
+      <header class="card-head">
+        <h2 data-i18n="sec.corners">圆角</h2>
+        <button class="reset" type="button" data-reset="corners" data-i18n-title="btn.reset" aria-label="reset">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.4h4.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </header>
+      <div class="card-body" id="corners-body"></div>
+    </section>
+
+    <section class="card" data-section="dish">
+      <header class="card-head">
+        <h2 data-i18n="sec.dish">碟形凹面</h2>
+        <button class="reset" type="button" data-reset="dish" data-i18n-title="btn.reset" aria-label="reset">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.4h4.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </header>
+      <div class="card-body" id="dish-body"></div>
+    </section>
+
+    <section class="card" data-section="shell">
+      <header class="card-head">
+        <h2 data-i18n="sec.shell">抽壳</h2>
+        <button class="reset" type="button" data-reset="shell" data-i18n-title="btn.reset" aria-label="reset">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.4h4.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </header>
+      <div class="card-body" id="shell-body"></div>
+    </section>
+
+    <section class="card" data-section="stem">
+      <header class="card-head">
+        <h2 data-i18n="sec.stem">轴心</h2>
+        <button class="reset" type="button" data-reset="stem" data-i18n-title="btn.reset" aria-label="reset">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.4h4.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </header>
+      <div class="card-body" id="stem-body"></div>
+    </section>
+
+  </aside>
+
+  <!-- ------------------------- CENTRE: VIEWPORT ------------------------- -->
+  <section class="viewport-wrap">
+    <div id="viewport" class="viewport"></div>
+
+    <div class="view-buttons" role="group" aria-label="views">
+      <button type="button" class="btn btn-seg" data-view="iso" data-i18n="view.iso">等轴</button>
+      <button type="button" class="btn btn-seg" data-view="top" data-i18n="view.top">俯视</button>
+      <button type="button" class="btn btn-seg" data-view="front" data-i18n="view.front">正视</button>
+      <button type="button" class="btn btn-seg" data-view="side" data-i18n="view.side">侧视</button>
+    </div>
+
+    <div class="viewport-overlay">
+      <div id="status-line" class="status-line">
+        <span id="status-dot" class="status-dot"></span>
+        <span id="status-text" data-i18n="status.ready">就绪</span>
+      </div>
+      <div id="warning-chips" class="warning-chips" role="status" aria-live="polite"></div>
+    </div>
+
+    <div class="viewer-toolbar">
+      <button id="btn-reframe" class="btn btn-ghost btn-sm" type="button" data-i18n-title="view.frame" aria-label="frame">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <span data-i18n="view.frame">取景</span>
+      </button>
+      <div class="stats" id="stats" aria-live="polite"></div>
+    </div>
+
+    <div id="topview" class="topview" role="group" data-i18n-aria="aria.topview"></div>
+  </section>
+
+  <!-- ------------------------- RIGHT: LEGEND / EXPORT ------------------------- -->
+  <aside class="sidebar right">
+
+    <section class="card">
+      <header class="card-head">
+        <h2 data-i18n="sec.legend">字符</h2>
+      </header>
+      <div class="card-body">
+        <div class="tabs" role="tablist">
+          <button type="button" class="tab is-active" role="tab" data-legend-tab="text" data-i18n="legend.tabText">文字</button>
+          <button type="button" class="tab" role="tab" data-legend-tab="svg" data-i18n="legend.tabSvg">SVG</button>
+          <button type="button" class="tab" role="tab" data-legend-tab="none" data-i18n="legend.tabNone">无</button>
+        </div>
+
+        <div class="tabpanel" data-panel="text">
+          <div class="field">
+            <label for="legend-text" data-i18n="label.legendText">文字</label>
+            <input id="legend-text" type="text" maxlength="6" autocomplete="off" spellcheck="false" data-i18n-placeholder="ph.legendText" placeholder="A / Esc" />
+          </div>
+          <div class="field">
+            <label for="legend-font" data-i18n="label.font">字体</label>
+            <select id="legend-font"></select>
+          </div>
+          <div class="field">
+            <button id="btn-import-font" class="btn btn-outline btn-block" type="button" data-i18n="legend.importFont">导入字体 (.ttf/.otf)</button>
+            <input id="file-font" type="file" accept=".ttf,.otf" hidden />
+          </div>
+        </div>
+
+        <div class="tabpanel is-hidden" data-panel="svg">
+          <div class="field">
+            <button id="btn-upload-svg" class="btn btn-outline btn-block" type="button" data-i18n="legend.uploadSvg">上传 SVG</button>
+            <input id="file-svg" type="file" accept=".svg,image/svg+xml" multiple hidden />
+          </div>
+          <div id="svg-gallery" class="svg-gallery"></div>
+        </div>
+
+        <div class="tabpanel is-hidden" data-panel="none">
+          <p class="hint" data-i18n="legend.noneHint">不添加字符，仅生成空白键帽。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" data-section="placement">
+      <header class="card-head">
+        <h2 data-i18n="sec.placement">摆放</h2>
+      </header>
+      <div class="card-body" id="placement-body"></div>
+    </section>
+
+    <section class="card" data-section="mode">
+      <header class="card-head">
+        <h2 data-i18n="sec.mode">嵌入模式</h2>
+      </header>
+      <div class="card-body" id="mode-body"></div>
+    </section>
+
+    <section class="card" data-section="colors">
+      <header class="card-head">
+        <h2 data-i18n="sec.colors">颜色</h2>
+      </header>
+      <div class="card-body" id="colors-body"></div>
+    </section>
+
+    <footer class="export-footer">
+      <section class="card card-flush">
+        <header class="card-head">
+          <h2 data-i18n="sec.export">导出</h2>
+        </header>
+        <div class="card-body">
+          <button id="btn-export-3mf" class="btn btn-primary btn-block" type="button" data-i18n="export.download3mf">下载 3MF</button>
+          <div class="btn-row">
+            <button id="btn-export-stl-cap" class="btn btn-outline" type="button" data-i18n="export.stlCap">STL 键帽</button>
+            <button id="btn-export-stl-legend" class="btn btn-outline" type="button" data-i18n="export.stlLegend">STL 字符</button>
+          </div>
+          <div class="btn-row">
+            <button id="btn-export-stl-stem" class="btn btn-outline" type="button" data-i18n="export.stlStem">STL 轴体</button>
+            <button id="btn-export-stl-merged" class="btn btn-outline" type="button" data-i18n="export.stlMerged">STL 合并</button>
+          </div>
+          <div class="btn-row">
+            <button id="btn-export-blank" class="btn btn-outline" type="button" data-i18n="export.blank">空白键帽</button>
+          </div>
+          <div class="btn-row">
+            <button id="btn-save-project" class="btn btn-outline" type="button" data-i18n="export.saveProject">保存工程</button>
+            <button id="btn-load-project" class="btn btn-outline" type="button" data-i18n="export.loadProject">载入工程</button>
+          </div>
+          <input id="file-project" type="file" accept=".json,application/json" hidden />
+        </div>
+      </section>
+    </footer>
+
+  </aside>
+</main>
+
+<!-- ============================= HELP MODAL ============================= -->
+<div id="help-modal" class="modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="help-title">
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-panel">
+    <header class="modal-head">
+      <h2 id="help-title" data-i18n="help.title">使用说明</h2>
+      <button class="btn btn-ghost btn-sm" type="button" data-close-modal data-i18n-title="btn.close" aria-label="close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </header>
+    <div class="modal-body">
+      <p data-i18n="help.intro"></p>
+      <svg class="help-diagram" viewBox="0 0 320 150" aria-hidden="true">
+        <rect x="30" y="24" width="120" height="96" rx="6" fill="none" stroke="var(--accent)" stroke-width="1.4"/>
+        <rect x="58" y="46" width="64" height="52" rx="4" fill="none" stroke="var(--accent-2)" stroke-width="1.4" stroke-dasharray="4 3"/>
+        <path d="M30 76h28M150 76h-28M52 24v22M52 120v-22" stroke="var(--muted)" stroke-width="1" stroke-dasharray="2 2"/>
+        <text x="90" y="18" text-anchor="middle" fill="var(--text)" font-size="9" data-i18n="help.diagramTop">顶面</text>
+        <text x="90" y="140" text-anchor="middle" fill="var(--text)" font-size="9" data-i18n="help.diagramBottom">底面</text>
+        <text x="36" y="70" fill="var(--text)" font-size="8" data-i18n="dir.back">后</text>
+        <text x="36" y="102" fill="var(--text)" font-size="8" data-i18n="dir.front">前</text>
+        <text x="10" y="80" fill="var(--text)" font-size="8" data-i18n="dir.left">左</text>
+        <text x="160" y="80" fill="var(--text)" font-size="8" data-i18n="dir.right">右</text>
+        <path d="M180 120h120M180 40l110 0" stroke="var(--text)" stroke-width="1.2"/>
+        <path d="M180 120V120 h120" stroke="var(--text)" stroke-width="1.2"/>
+        <path d="M180 120 L300 40" stroke="var(--accent-2)" stroke-width="1.4"/>
+        <path d="M196 120 A16 16 0 0 0 194 110" fill="none" stroke="var(--text)" stroke-width="1"/>
+        <text x="202" y="114" fill="var(--text)" font-size="8" data-i18n="label.tiltX">倾斜角</text>
+        <text x="182" y="132" fill="var(--text)" font-size="8" data-i18n="dir.front">前</text>
+        <text x="294" y="36" fill="var(--text)" font-size="8" data-i18n="dir.back">后</text>
+      </svg>
+      <dl class="help-list">
+        <dt data-i18n="help.insets.title">顶面内缩 / 底面延伸</dt><dd data-i18n="help.insets.body"></dd>
+        <dt data-i18n="help.tilt.title">倾斜符号约定</dt><dd data-i18n="help.tilt.body"></dd>
+        <dt data-i18n="help.dish.title">碟形凹面</dt><dd data-i18n="help.dish.body"></dd>
+        <dt data-i18n="help.legend.title">字符模式</dt><dd data-i18n="help.legend.body"></dd>
+        <dt data-i18n="help.stem.title">轴心</dt><dd data-i18n="help.stem.body"></dd>
+        <dt data-i18n="help.export.title">导出与工程</dt><dd data-i18n="help.export.body"></dd>
+      </dl>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>

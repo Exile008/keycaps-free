@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SVG legend tests</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root { --ink:#20242b; --paper:#f5f6f8; --line:#b7bec9; --space:1rem; }
+    body { font:16px/1.5 system-ui,sans-serif; margin:2rem; color:var(--ink); background:var(--paper); }
+    main { max-width:65rem; margin:auto; } section { margin-block:var(--space); border-top:1px solid var(--line); }
+    canvas { width:min(100%,360px); height:auto; border:1px solid var(--line); }
+    .fail { font-weight:700; } pre { white-space:pre-wrap; }
+  </style>
+  <script type="importmap">{"imports":{"three":"../vendor/three/three.module.js","three/addons/":"../vendor/three/addons/"}}</script>
+</head>
+<body><main><h1>SVG legend tests</h1><p>Offline fixture checks. Filled regions include holes; strokes are rounded capsules. Coordinates shown Y-up. The candle fixture uses automatic part selection (artboard/background/grid off).</p><p id="summary" role="status">Running…</p><pre id="result"></pre><div id="results"></div><p><a href="svg-parts.test.html">Run the complete automated parts/composition tests</a></p></main>
+<script type="module">
+import { svgToContours } from '../js/svg-legend.js';
+import { getManifold } from '../js/manifold-loader.js';
+import { contoursToCrossSection } from '../js/legend-core.js';
+const results = document.querySelector('#results');
+let passed = 0, total = 0;
+const assert = (condition, message) => { if (!condition) throw Error(message); };
+try {
+  const wasm = await getManifold();
+  const cases = [
+    ['ring.svg', cs => { assert(Math.abs(cs.area()-336)<.01, 'Ring area must exclude its 8×8 hole'); }],
+    ['stroke.svg', cs => { assert(cs.area()>45 && cs.area()<60, 'Capsule stroke area'); }],
+    ['transform.svg', cs => { const b=cs.bounds(); assert(Math.abs(cs.area()-200)<.01 && b.min[0]===20 && b.max[0]===40 && b.min[1]===-20 && b.max[1]===-10, 'Group transform / flipped Y bounds'); }],
+    ['candles-app-icon.svg', cs => {
+      const regions=cs.decompose();
+      try { assert(regions.length>=6,'At least six separate candles, not a background square'); }
+      finally { regions.forEach(region=>region.delete()); }
+      assert(cs.toPolygons().length>=9,'Hollow candles retain their holes');
+      assert(cs.bounds().min[0]===80 && cs.bounds().max[0]===435,'Only candle geometry remains');
+    }],
+  ];
+  function draw(canvas, cs) {
+    const ctx=canvas.getContext('2d'), b=cs.bounds(), scale=280/Math.max(b.max[0]-b.min[0],b.max[1]-b.min[1]);
+    ctx.translate(180,150); ctx.scale(scale,-scale); ctx.translate(-(b.min[0]+b.max[0])/2,-(b.min[1]+b.max[1])/2);
+    ctx.beginPath();
+    for(const poly of cs.toPolygons()) { poly.forEach(([x,y],i)=>i ? ctx.lineTo(x,y):ctx.moveTo(x,y)); ctx.closePath(); }
+    ctx.fillStyle='#24658c'; ctx.fill('nonzero');
+  }
+  for(const [file, check] of cases) {
+    total++; const section=document.createElement('section'), heading=document.createElement('h2'); section.append(heading); results.append(section);
+    let cs;
+    try {
+      const response=await fetch('./fixtures/'+file); assert(response.ok,'Fixture load');
+      const data=svgToContours(await response.text()); cs=contoursToCrossSection(wasm,data.polygons,data.fillRule);
+      check(cs); const canvas=document.createElement('canvas'); canvas.width=360; canvas.height=300; canvas.setAttribute('aria-label',file+' contours'); section.append(canvas); draw(canvas,cs);
+      heading.textContent='PASS — '+file; passed++;
+    } catch(error) { heading.textContent='FAIL — '+file+': '+error.message; heading.className='fail'; }
+    finally { cs?.delete(); }
+  }
+  const extra = [
+    ['basic shapes', '<rect width="4" height="3"/><circle cx="10" cy="10" r="2"/><ellipse cx="20" cy="10" rx="3" ry="2"/><polygon points="30,0 34,0 32,4"/><polyline fill="none" stroke="black" points="40,0 44,4 48,0"/><line stroke="black" x1="50" y1="0" x2="54" y2="4"/>'],
+    ['empty SVG', ''],
+  ];
+  for(const [name,body] of extra) {
+    total++; const p=document.createElement('p'); results.append(p);
+    try {
+      if(body) assert(svgToContours('<svg xmlns="http://www.w3.org/2000/svg">'+body+'</svg>').polygons.length>=6,'Basic shape contours');
+      else { let message=''; try { svgToContours('<svg xmlns="http://www.w3.org/2000/svg"/>'); } catch(e) {message=e.message;} assert(message==='err.svgNoShapes','Empty SVG error'); }
+      p.textContent='PASS — '+name; passed++;
+    } catch(e) { p.textContent='FAIL — '+name+': '+e.message; }
+  }
+} catch(error) { const p=document.createElement('pre'); p.textContent=error.stack; results.append(p); }
+document.querySelector('#summary').textContent=`${passed}/${total} PASS`;
+document.querySelector('#result').textContent=[...results.querySelectorAll('h2,p,pre')].map(node=>node.textContent).join('\n')+'\n'+`${passed}/${total} PASS`;
+document.documentElement.dataset.testStatus=passed===total && total>0?'pass':'fail';
+</script></body></html>

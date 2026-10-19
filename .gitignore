@@ -1,0 +1,15 @@
+# local agent / tool state
+logs/
+.codegraph/
+.omo/
+.playwright-mcp/
+.opencode/
+node_modules/
+_site/
+*.log
+Thumbs.db
+.DS_Store
+desktop.ini
+# Synology Drive
+@eaDir/
+#recycle/

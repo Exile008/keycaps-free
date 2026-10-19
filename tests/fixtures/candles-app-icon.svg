@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- artboard (transparent background rect, typical of exported icons) -->
+  <rect x="0" y="0" width="512" height="512" fill="none" stroke="#cccccc" stroke-width="1"/>
+  <!-- app background: red rounded square -->
+  <rect x="40" y="40" width="432" height="432" rx="90" fill="#e8262a"/>
+  <!-- faint chart grid + axis labels -->
+  <g stroke="#ff6b6b" stroke-width="2" opacity="0.35" fill="none">
+    <path d="M40 160 H472 M40 260 H472 M40 360 H472 M150 40 V472 M300 40 V472"/>
+  </g>
+  <g fill="#ff8080" opacity="0.4" font-size="22" font-family="sans-serif">
+    <text x="50" y="155">130</text><text x="50" y="255">120</text><text x="50" y="355">110</text>
+  </g>
+  <!-- candles (cream) : solid bodies + wicks -->
+  <g fill="#fff3e0">
+    <rect x="80" y="330" width="36" height="50"/><rect x="95" y="315" width="6" height="80"/>
+    <rect x="215" y="285" width="36" height="75"/><rect x="230" y="270" width="6" height="100"/>
+    <rect x="335" y="200" width="36" height="70"/><rect x="350" y="185" width="6" height="95"/>
+  </g>
+  <!-- hollow candles: filled outer with even-odd hole -->
+  <path fill="#fff3e0" fill-rule="evenodd" d="M140 320 h36 v50 h-36 z M148 328 v34 h20 v-34 z"/>
+  <path fill="#fff3e0" fill-rule="evenodd" d="M275 240 h36 v45 h-36 z M283 248 v29 h20 v-29 z"/>
+  <!-- tall hollow candle drawn as a stroke outline -->
+  <rect x="400" y="120" width="30" height="200" fill="none" stroke="#fff3e0" stroke-width="10"/>
+  <path d="M415 95 V120 M415 320 V345" stroke="#fff3e0" stroke-width="8" fill="none"/>
+</svg>

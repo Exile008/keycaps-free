@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SVG parts automated tests</title>
+  <link rel="icon" href="data:,">
+  <script type="importmap">{"imports":{"three":"../vendor/three/three.module.js","three/addons/":"../vendor/three/addons/"}}</script>
+</head>
+<body><h1>SVG parts automated tests</h1><pre id="result">Running…</pre>
+<script type="module">
+import { parseSvgParts, defaultModes, defaultSvgOptions, buildSvgCrossSection, svgToContours } from '../js/svg-legend.js';
+import { getManifold } from '../js/manifold-loader.js';
+const output = document.querySelector('#result'), lines = [];
+let passed = 0, total = 0;
+const assert = (condition, message) => { if (!condition) throw Error(message); };
+const near = (a, b, tolerance = .01) => assert(Math.abs(a - b) < tolerance, `${a} != ${b}`);
+const svg = (body, attributes = 'viewBox="0 0 100 100"') => `<svg xmlns="http://www.w3.org/2000/svg" ${attributes}>${body}</svg>`;
+const parse = (body, attributes) => parseSvgParts(svg(body, attributes));
+function test(name, run) {
+  total++;
+  try { run(); passed++; lines.push('PASS ' + name); }
+  catch (error) { lines.push('FAIL ' + name + ': ' + error.message); }
+  output.textContent = lines.join('\n');
+}
+function use(wasm, parsed, modes, options, check) {
+  const cs = buildSvgCrossSection(wasm, parsed, modes, options);
+  try { check(cs); } finally { cs.delete(); }
+}
+function empty(run) {
+  let message;
+  try { const result = run(); result?.delete?.(); } catch (e) { message = e.message; }
+  assert(message === 'err.svgNoShapes', 'Expected err.svgNoShapes, got ' + message);
+}
+const area = points => points.reduce((sum, p, i) => { const q = points[(i + 1) % points.length]; return sum + p[0] * q[1] - q[0] * p[1]; }, 0) / 2;
+try {
+  const wasm = await getManifold();
+  const response = await fetch('./fixtures/candles-app-icon.svg');
+  assert(response.ok, 'Candle fixture load');
+  const candleText = await response.text(), candles = parseSvgParts(candleText), auto = defaultModes(candles);
+  test('candle fixture: ordered API, artboard off, red background off, grid faint off', () => {
+    assert(candles.viewBox.w === 512 && candles.viewBox.h === 512, 'viewBox');
+    assert(candles.parts.every((p, i) => p.id === 'p' + i && p.index === i), 'Stable painter order');
+    assert(candles.parts[0].role === 'artboard' && auto.p0 === 'off', 'Artboard');
+    assert(candles.parts[1].fill === '#e8262a' && candles.parts[1].role === 'background' && auto.p1 === 'off', 'Red background');
+    assert(candles.parts[2].role === 'faint' && auto.p2 === 'off', 'Faint grid');
+    assert(candles.parts.slice(3).every(p => auto[p.id] === (p.fill ? 'fill' : 'outline')), 'Every candle on');
+    assert(candles.parts.every(p => p.defaultMode === auto[p.id]), 'Default-mode fields match helper');
+  });
+  test('candle fixture: six separate regions and three preserved hollow centres', () => {
+    use(wasm, candles, auto, {}, cs => {
+      const regions = cs.decompose();
+      try { assert(regions.length >= 6, 'Expected six candle regions, got ' + regions.length); }
+      finally { regions.forEach(p => p.delete()); }
+      const holes = cs.toPolygons().filter(p => area(p) < 0);
+      assert(holes.length >= 3, 'Both even-odd candles and stroked candle retain holes');
+      near(cs.bounds().min[0], 80); near(cs.bounds().max[0], 435);
+    });
+  });
+  test('candle fixture: background Fill and candle Cut make candle-shaped holes', () => {
+    const modes = Object.fromEntries(candles.parts.map(p => [p.id, 'off'])); modes.p1 = 'fill';
+    candles.parts.slice(3).forEach(p => { modes[p.id] = 'cut'; });
+    use(wasm, candles, modes, {}, cs => {
+      const holes = cs.toPolygons().filter(p => area(p) < 0);
+      assert(holes.length >= 6, 'Candle knock-outs inside square');
+      near(cs.bounds().min[0], 40); near(cs.bounds().max[0], 472);
+      assert(cs.area() > 100000 && cs.area() < candles.parts[1].area, 'Square minus candle fills');
+    });
+  });
+  test('text is ignored with one warning, never one warning per label', () => {
+    assert(candles.warnings.length === 1 && candles.warnings[0] === 'warn.svgTextIgnored', 'One text warning');
+    assert(!candles.parts.some(p => p.tag === 'text'), 'Text is not a part');
+    const onlyText = parse('<text>A</text><text>B</text>');
+    assert(onlyText.parts.length === 0 && onlyText.warnings.length === 1, 'Text-only parse result');
+    empty(() => buildSvgCrossSection(wasm, onlyText));
+  });
+  test('artboard: 97% threshold, white, transparent and no-fill paths', () => {
+    for (const body of ['<rect width="97" height="97" fill="white"/>', '<path d="M0 0 H100 V100 H0 Z" fill="none" stroke="black"/>', '<rect width="100" height="100" fill="transparent"/>']) {
+      const parsed = parse(body + '<circle cx="20" cy="20" r="5"/>');
+      assert(parsed.parts[0].role === 'artboard' && parsed.parts[0].defaultMode === 'off', body);
+    }
+    assert(parse('<rect width="96" height="96" fill="white"/>').parts[0].role !== 'artboard', 'Below threshold');
+    empty(() => buildSvgCrossSection(wasm, parse('<rect width="100" height="100" fill="white"/>')));
+  });
+  test('background: 80% size and half of other centres required', () => {
+    const parsed = parse('<rect x="10" y="10" width="80" height="80" fill="red"/><circle cx="20" cy="20" r="5"/><circle cx="80" cy="80" r="5"/>');
+    assert(parsed.parts[0].role === 'background' && parsed.parts[0].defaultMode === 'off', 'Enclosing background');
+    const separate = parse('<rect width="80" height="80" fill="red"/><circle cx="150" cy="150" r="5"/><circle cx="200" cy="200" r="5"/>');
+    assert(separate.parts[0].role === 'fill', 'Large but remote shape must stay on');
+  });
+  test('faint: nested group opacity multiplies local fill/stroke opacity', () => {
+    const parsed = parse('<g opacity=".8"><g opacity=".75"><rect width="10" height="10" opacity=".9" fill="red" fill-opacity=".8"/><path d="M20 0 V10" fill="none" stroke="blue" stroke-opacity=".7"/></g></g><rect x="50" width="2" height="2"/>');
+    near(parsed.parts[0].opacity, .54); near(parsed.parts[0].fillOpacity, .8);
+    near(parsed.parts[1].opacity, .6);
+    assert(parsed.parts[0].role === 'faint' && parsed.parts[1].role === 'faint', 'Both effective paints below .5');
+    assert(parsed.parts[0].defaultMode === 'off' && parsed.parts[1].defaultMode === 'off', 'Faint disabled');
+  });
+  test('faint threshold is strict; RGBA paint alpha and inherited currentColor', () => {
+    const parsed = parse('<g color="#123456"><rect width="10" height="10" fill="currentColor" opacity=".5"/><rect x="20" width="10" height="10" fill="rgba(255, 0, 0, .4)"/><path d="M40 0 V10" fill="none" stroke="currentColor"/></g>');
+    assert(parsed.parts[0].fill === '#123456' && parsed.parts[0].role === 'fill', 'Opacity .5 stays enabled');
+    assert(parsed.parts[1].fill === '#ff0000' && parsed.parts[1].role === 'faint', 'RGBA fill alpha');
+    assert(parsed.parts[2].stroke === '#123456' && parsed.parts[2].defaultMode === 'outline', 'CurrentColor stroke');
+  });
+  test('nested inherited paint opacities, CSS alpha and ancestor opacity are independent', () => {
+    const parsed = parse('<g opacity=".5" fill="blue" fill-opacity=".8" stroke="rgba(0,128,0,.5)" stroke-opacity=".75"><g opacity=".8"><rect width="10" height="10"/><path d="M20 0 H30" fill="none" stroke-width="3"/></g></g><rect x="50" width="2" height="2"/>');
+    near(parsed.parts[0].opacity, .4); near(parsed.parts[0].fillOpacity, .8);
+    near(parsed.parts[1].opacity, .4); near(parsed.parts[1].strokeOpacity, .375);
+    assert(parsed.parts[0].fill === '#0000ff' && parsed.parts[1].stroke === '#008000', 'Effective inherited colors');
+    assert(parsed.parts[0].defaultMode === 'off' && parsed.parts[1].defaultMode === 'off', 'Faint inherited paints');
+  });
+  test('CSS, inline style and nested group opacity override loader scalar opacity', () => {
+    const parsed = parse('<style>.group { opacity:.5; color:#135790 } .ink { fill:currentColor; fill-opacity:.8 } #item { opacity:.8 }</style><g class="group"><g opacity=".8"><rect id="item" class="ink" style="opacity:.75" width="10" height="10"/></g></g><rect x="30" width="2" height="2"/>');
+    near(parsed.parts[0].opacity, .3); near(parsed.parts[0].fillOpacity, .8);
+    assert(parsed.parts[0].fill === '#135790' && parsed.parts[0].defaultMode === 'off', 'CSS effective paint');
+  });
+  test('hidden/display-none/zero opacity are not printable parts', () => {
+    const parsed = parse('<g display="none"><rect width="10" height="10"/></g><g style="display:none"><rect width="10" height="10"/></g><g opacity="0"><rect opacity="1" width="10" height="10"/></g><rect visibility="hidden" width="10" height="10"/><rect x="20" width="2" height="2"/>');
+    assert(parsed.parts.length === 1 && parsed.parts[0].bbox.minX === 20, 'Hidden descendants excluded');
+  });
+  test('all-off fallback chooses largest non-artboard; reset ignores edited defaultMode', () => {
+    const parsed = parse('<rect width="100" height="100" fill="none" stroke="gray"/><rect x="10" y="10" width="20" height="20" opacity=".1"/><rect x="50" y="50" width="5" height="5" opacity=".1"/>');
+    const modes = defaultModes(parsed);
+    assert(modes.p0 === 'off' && modes.p1 === 'fill' && modes.p2 === 'off', 'Largest faint part fallback');
+    parsed.parts.forEach(p => { p.defaultMode = 'cut'; });
+    assert(defaultModes(parsed).p1 === 'fill' && defaultModes(parsed).p0 === 'off', 'Reset recomputes');
+  });
+  test('stroke-only defaults to own width, filled parts to Fill', () => {
+    const parsed = parse('<path d="M0 0 H10" fill="none" stroke="black" stroke-width="2"/><rect x="20" width="10" height="10"/>');
+    assert(parsed.parts[0].defaultMode === 'outline' && parsed.parts[1].defaultMode === 'fill', 'Paint defaults');
+    use(wasm, parsed, {p1:'off'}, {outlineWidth:30}, cs => near(cs.area(), 20 + 8 * Math.sin(Math.PI / 8), .02));
+  });
+  test('closed stroke default also uses its own width, not the global width', () => {
+    const parsed = parse('<rect width="10" height="10" fill="none" stroke="black" stroke-width="2"/>');
+    assert(parsed.parts[0].role === 'stroke' && parsed.parts[0].defaultMode === 'outline', 'Closed stroke auto mode');
+    use(wasm, parsed, {}, {outlineWidth:30}, cs => {
+      near(cs.area(), 76 + 8 * Math.sin(Math.PI / 8), .02);
+      near(cs.bounds().min[0], -1); near(cs.bounds().max[0], 11);
+    });
+  });
+  test('outline width default is median stroke width, else 1.5% of bbox', () => {
+    const parsed = parse('<path d="M0 0 H10" fill="none" stroke="black" stroke-width="2"/><path d="M20 0 H30" fill="none" stroke="black" stroke-width="8"/>');
+    near(defaultSvgOptions(parsed).outlineWidth, 5);
+    near(defaultSvgOptions(parse('<rect width="20" height="10"/>')).outlineWidth, .3);
+  });
+  test('closed outlines are round outer-offset minus inner-offset rings', () => {
+    const parsed = parse('<rect width="10" height="10"/>');
+    use(wasm, parsed, {p0:'outline'}, {outlineWidth:2}, cs => {
+      near(cs.area(), 80 - 4 + 8 * Math.sin(Math.PI / 8), .02);
+      assert(cs.toPolygons().filter(p => area(p) < 0).length === 1, 'Ring hole');
+      near(cs.bounds().min[0], -1); near(cs.bounds().max[0], 11);
+    });
+  });
+  test('outline visits both outer and hole centrelines', () => {
+    const parsed = parse('<path fill-rule="evenodd" d="M0 0 H20 V20 H0 Z M6 6 H14 V14 H6 Z"/>');
+    use(wasm, parsed, {p0:'outline'}, {outlineWidth:1}, cs => {
+      const regions = cs.decompose(); try { assert(regions.length === 2, 'Two boundary rings'); } finally { regions.forEach(p => p.delete()); }
+    });
+  });
+  test('Fill/Cut keep EvenOdd holes and ignore original stroke paint', () => {
+    const parsed = parse('<path fill-rule="evenodd" d="M0 0 H20 V20 H0 Z M6 6 H14 V14 H6 Z"/><rect x="30" width="10" height="10" fill="none" stroke="blue" stroke-width="2"/>');
+    use(wasm, parsed, {p0:'fill',p1:'fill'}, {}, cs => near(cs.area(), 336 + 100));
+    assert(parsed.parts[0].fillRule === 'EvenOdd' && parsed.parts[0].area === 336, 'Part hole metadata');
+  });
+  test('transforms are baked into geometry, Y-up bbox and own stroke width', () => {
+    const parsed = parse('<g transform="translate(20 10) scale(2)"><rect width="10" height="5" fill="none" stroke="black" stroke-width="2"/></g>');
+    const part = parsed.parts[0]; near(part.bbox.minX, 20); near(part.bbox.maxY, -10); near(part.strokeWidth, 4);
+    use(wasm, parsed, {p0:'fill'}, {}, cs => near(cs.area(), 200));
+  });
+  test('style groups contain every part once and split distinct stroke widths/opacities', () => {
+    assert(candles.groups.flatMap(g => g.partIds).length === candles.parts.length, 'Complete groups');
+    const group = candles.groups.find(g => g.partIds.includes('p3'));
+    assert(group.partIds.length === 6 && group.fill === '#fff3e0', 'Six matching solid candle shapes grouped');
+    assert(candles.groups.find(g => g.partIds.includes('p11')) !== candles.groups.find(g => g.partIds.includes('p12')), 'Stroke widths split');
+  });
+  test('composition follows painter order: union, subtraction, later refill, Off', () => {
+    const parsed = parse('<rect width="10" height="10"/><rect x="2" y="2" width="6" height="6"/><rect x="4" y="4" width="2" height="2"/>');
+    use(wasm, parsed, {p0:'fill',p1:'cut',p2:'fill'}, {}, cs => near(cs.area(), 68));
+    use(wasm, parsed, {p0:'cut',p1:'fill',p2:'off'}, {}, cs => near(cs.area(), 36));
+    use(wasm, parsed, {p0:'fill',p1:'fill',p2:'fill'}, {}, cs => near(cs.area(), 100));
+    empty(() => buildSvgCrossSection(wasm, parsed, {p0:'off',p1:'off',p2:'off'}));
+    empty(() => buildSvgCrossSection(wasm, parsed, {p0:'cut',p1:'cut',p2:'cut'}));
+  });
+  test('invert subtracts from background fill; without background uses union bbox', () => {
+    use(wasm, candles, auto, {invert:true}, inverse => {
+      use(wasm, candles, auto, {}, normal => near(inverse.area() + normal.area(), candles.parts[1].area, .1));
+    });
+    const parsed = parse('<rect width="2" height="2"/><rect x="8" width="2" height="2"/>');
+    use(wasm, parsed, {p0:'fill',p1:'off'}, {invert:true}, cs => near(cs.area(), 16));
+    use(wasm, parsed, {p0:'off',p1:'off'}, {invert:true}, cs => near(cs.area(), 20));
+  });
+  test('compatibility wrapper uses same auto modes and preserves hollow candles', () => {
+    const data = svgToContours(candleText), cs = new wasm.CrossSection(data.polygons, data.fillRule);
+    try {
+      use(wasm, candles, auto, {}, expected => near(cs.area(), expected.area(), .1));
+      assert(cs.toPolygons().filter(p => area(p) < 0).length >= 3, 'Wrapper holes');
+    } finally { cs.delete(); }
+    empty(() => svgToContours(svg('')));
+    empty(() => svgToContours(svg('<rect width="100" height="100" fill="white"/>')));
+  });
+  test('empty SVG and exact cancellation throw err.svgNoShapes', () => {
+    empty(() => buildSvgCrossSection(wasm, parse('')));
+    const parsed = parse('<rect width="10" height="10"/><rect width="10" height="10"/>');
+    empty(() => buildSvgCrossSection(wasm, parsed, {p0:'fill',p1:'cut'}));
+  });
+  test('all temporary CrossSections deleted on success, empty and boolean errors', () => {
+    const live = new Set(); let fail = false;
+    function track(cs) {
+      live.add(cs);
+      const remove = cs.delete.bind(cs);
+      cs.delete = () => { assert(live.delete(cs), 'Double delete'); remove(); };
+      for (const method of ['add','subtract','offset']) {
+        const original = cs[method].bind(cs);
+        cs[method] = (...args) => { if (fail && method === 'subtract') throw Error('injected'); return track(original(...args)); };
+      }
+      return cs;
+    }
+    const CrossSection = new Proxy(wasm.CrossSection, {
+      construct(target, args) { return track(new target(...args)); },
+      get(target, key) { return key === 'square' ? (...args) => track(target.square(...args)) : target[key]; },
+    });
+    const tracked = { CrossSection };
+    for (let i = 0; i < 5; i++) {
+      const cs = buildSvgCrossSection(tracked, candles, auto, {invert:i % 2 === 0});
+      assert(live.size === 1 && live.has(cs), 'Only return value stays owned by caller');
+      cs.delete(); assert(live.size === 0, 'Caller releases final section');
+    }
+    empty(() => buildSvgCrossSection(tracked, candles, Object.fromEntries(candles.parts.map(p => [p.id,'off']))));
+    assert(live.size === 0, 'Empty-result cleanup');
+    fail = true;
+    try { buildSvgCrossSection(tracked, candles, auto, {}); assert(false, 'Expected injected error'); }
+    catch (e) { assert(e.message === 'injected', 'Injected offset-ring subtraction error'); }
+    assert(live.size === 0, 'Exception cleanup');
+  });
+} catch (error) { total++; lines.push('FAIL setup: ' + error.stack); }
+lines.push(`${passed}/${total} PASS`); output.textContent = lines.join('\n');
+document.documentElement.dataset.testStatus = passed === total && total > 0 ? 'pass' : 'fail';
+</script></body></html>
