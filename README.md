@@ -15,6 +15,8 @@
 - 嵌入双色、凹刻、凸起、透光四种模式；主体/字符颜色。
 - 高精度 3MF、主体/字符/合并 STL、真正无字符的空白 STL；工程 JSON 保存/载入（含自定义字体及所选 SVG），Ctrl+S 保存。
 - 中英切换、深浅主题；浏览器自动保存参数和文字，不在自动会话中保存上传字体或 SVG。工程 JSON 用于携带这些资源。
+- <img width="2400" height="1429" alt="v2ex-2-light" src="https://github.com/user-attachments/assets/6e1e6da6-0253-44b9-a000-b13119349f68" />
+
 
 ### 参数与坐标
 
