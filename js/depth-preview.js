@@ -36,8 +36,10 @@ function fmt(v) {
 
 // Local Z of the inner top surface.  The inner hull uses the same dish depth
 // but its own (smaller) top rectangle, so recompute the sagitta radius.
-function innerDishZ(p, tw, td, x, y) {
+// KLP sculpted tops use keycap.js's sculptZ (passed in) with the inner a, b.
+function innerDishZ(p, tw, td, x, y, sculptZ) {
   const d = p.dishDepth;
+  if (String(p.dishType).startsWith('klp')) return sculptZ ? sculptZ(p.dishType, tw / 2, td / 2, p, x, y) : 0;
   if (p.dishType === 'flat' || !(d >= 0.05)) return 0;
   if (p.dishType === 'cylindrical') {
     const r = (tw * tw + 4 * d * d) / (8 * d);
@@ -81,6 +83,7 @@ function polyline(pts, X, Y) {
 export function createDepthPreview(container, geom = {}) {
   const computeLayout = typeof geom.computeLayout === 'function' ? geom.computeLayout : null;
   const dishSurfaceZ = typeof geom.dishSurfaceZ === 'function' ? geom.dishSurfaceZ : null;
+  const sculptZ = typeof geom.sculptZ === 'function' ? geom.sculptZ : null;
   const root = document.createElement('div');
   root.className = 'depth-preview';
   container.replaceChildren(root);
@@ -118,7 +121,7 @@ export function createDepthPreview(container, geom = {}) {
     const halfI = Math.max(0.001, faceHalfX(yc, twi, tdi, ri));
 
     const surface = (x) => (dishSurfaceZ ? dishSurfaceZ(layout, x, yc) : 0);
-    const innerSurface = (x) => innerDishZ(p, twi, tdi, x, yc) - p.topThickness;
+    const innerSurface = (x) => innerDishZ(p, twi, tdi, x, yc, sculptZ) - p.topThickness;
 
     // Cut depth produced by applyLegend: shine ignores legendDepth and cuts
     // through topThickness + dish + 0.5 mm.

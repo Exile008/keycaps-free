@@ -244,3 +244,37 @@ Every numeric control = slider + number input (like the original `.prow`). Each 
 - [ ] Language toggle switches every visible string including tooltips, warnings, status, help.
 - [ ] Save → reload page → Load restores identical model.
 - [ ] `node tests/geometry.test.mjs` and `node tests/legend-export.test.mjs` pass.
+
+## 10. KLP Lamé–style caps, Choc stems and sizes (FEAT-02, 2026-10-22)
+
+Shape after braindefender's [KLP Lamé Keycaps](https://github.com/braindefender/KLP-Lame-Keycaps), re-created parametrically (no meshes bundled). Attribution is required: the UI shows a credit link (`#klp-credit`) whenever a `klp*` dish is active, README credits it in both languages, and the 3MF gets `<metadata name="Description">… KLP Lamé–style shape (braindefender, URL)</metadata>` (`to3MF(parts, {description})`; no metadata otherwise).
+
+### 10.1 New parameters
+| key | default | range / values | meaning |
+| --- | --- | --- | --- |
+| `pitchY` | `null` | 15–20 | Y pitch; `null` = `pitch`. `D = unitD·(pitchY ?? pitch) − gap`. |
+| `sizeStandard` | `'mx'` | `'mx' \| 'choc' \| 'custom'` | UI helper. `SIZE_STANDARD_VALUES`: mx = 19.05/19.05/1.05, choc = 18/17/0.5 (pitch/pitchY/gap). |
+| `stemType` | `'mx'` | + `'choc'` | Kailh Choc v1 prongs. |
+| `stemRotate` | 0 | 0 \| 90 (anything else → 0) | rotates the stem pattern about Z at each stem position (MX cross or Choc prongs). Stem positions are not moved. |
+| `chocProngW` `chocProngL` `chocSpacing` `chocProngZ` | 1.2, 3.0, 5.7, −0.5 | 0.7–1.7, 2.5–3.5, 5.2–6.2, −1–0 | prong size (X × Y), centre distance, tip Z. `stemTolerance` shrinks W and L. |
+| `skirtStyle` | `'straight'` | `'straight' \| 'rounded'` | |
+| `skirtStraight` `skirtRadius` | 1.5, 6.7 | 0–4, 2–20 | rounded skirt: vertical part, arc radius. |
+| `dishType` | | + `'klp' \| 'klp-thumb' \| 'klp-saddle'` | sculpted tops (§10.2). `dishDepth` = recess depth. |
+| `sculptRim` `sculptDrop` | 0.86, 0.85 | 0.3–3, 0–3 | recess rim width; thumb/saddle edge drop. |
+| `homingType` | `'bar'` | `'bar' \| 'dots3'` | dots3 = three spheres (r 0.8 at the centre, r 0.75 at ±1.5 mm in X), centres 0.5 below the top surface. |
+| `rBottom` range | max **6** | | KLP needs 4.3. |
+
+Old projects without these keys load exactly as before. New warnings: `warn.chocStabs` (Choc with `stabilizers:'auto'` at ≥ 2u: only the centre stem is built), `warn.chocRibs` (ribs are skipped with Choc stems; they would block the switch stem between the prongs).
+
+### 10.2 Geometry (`js/keycap.js`)
+- `sculptZ(type, a, b, p, x, y)` (exported), top-local, z = 0 is the rim plane. `ax = a − sculptRim`, `ay = b − sculptRim`, `Gx = (1 − min(1,|x|/ax)^2.5)^1.3`, `Gy = (1 − min(1,|y|/ay)^1.7)^1.2`. `klp`: `−D·Gx·Gy`. `klp-thumb`: for y < 0 `−D·Gx − drop·(|y|/b)^2.77`, else as `klp`. `klp-saddle`: `−D·Gx − drop·(|y|/b)^2.77` on both sides. `dishSurfaceZ` returns it for `klp*` dishes.
+- Cutter: closed height-field mesh between `min(sculptZ,0) + 0.02` and +30, dense over ±(half + 1.5) (`QUALITY.sculptGrid` 48 / 120 cells, scaled up to 4× along the long axis) and coarser out to ±(half + 6 + height), so thumb/saddle cuts also shave the skirt. Placed with `frame.mat4`. The inner hull gets the same cutter built from its own (wall-shrunk) top size at `height − topThickness`.
+- Rounded skirt: footprint at z = 0 (and −1 for the inner hull), at `zs = min(skirtStraight, lowest top point − 0.2)`, then `QUALITY.skirtRings` (8 / 16) rings: each footprint point moves to its index-matched top point with z linear in t and horizontal fraction `f(t) = (R − √(R² − (t·dz)²)) / (R − √(R² − dz²))`, `R = max(skirtRadius, dz + 1e-3)`.
+- Choc: per stem position two rounded-rect prongs (corner 0.35) at ±`chocSpacing`/2, hull from `chocProngZ` (inset 0.2 → 0.2 × 45° tip chamfer) up into the top, clipped to `outer ∪ slab below z = 0`, so tips protrude below the cap bottom. No cross hole. Reinforcement: a 45° chamfer of `min(stemFillet, 0.5)` around each prong at the ceiling, clipped to the inner cavity. `stemSeparate` works (stem part = prongs + chamfer ∩ inner).
+- Ribs (MX) are trimmed against cylinders 0.05 mm thinner than the stems, so the rib overlaps the stem wall (a touching-only union could leave spurious tunnels). The final cross-hole cut through the joined cap is skipped when the cross top stays below the inner ceiling at every stem (it is volumetrically empty then).
+
+### 10.3 Presets
+`PRESETS.klp`, `klp-thumb`, `klp-saddle` with per-family rows (`presetRows(family)`, `presetDefaultRow(family)`): `flat` (height 5.65, tiltX 0), `tilted` (7.45, 15), `homing` (5.65, 0, `homingBump:true`, `homingType:'dots3'`); thumb has `flat` only. Common keys: dishDepth 0.85, sculptRim 0.86, sculptDrop 0.85, insets 1.44, rTop 3.2, rBottom 4.3, skirt rounded 1.5 / 6.7, wall 0.9, topThickness 1.5. `applyPreset` sets `PRESET_PARAM_KEYS` the preset defines plus the row keys; classic families set `skirtStyle:'straight'`. Legend, colour, size, extensions and stem settings are kept.
+
+### 10.4 UI
+Profile: row select built from the family's rows (`R1–R4`, or `row.flat/tilted/homing`). Size: "Switch / size" select (Choc or MX stem × Choc or MX size; shows Custom otherwise). Corners: skirt style + Advanced (vertical part, arc radius). Dish: 3 KLP options + Advanced (rim, edge drop). Stem: Choc option, "Rotate stem 90°", Advanced Choc prong dimensions (Choc only; stem Z hidden for Choc), homing style (when the homing bump is on). Top view draws two prong rectangles for Choc; the side profile draws the rounded skirt and, for KLP tops, the centre-line sculpt clipped against the skirt. Depth preview uses `sculptZ` for the inner surface.

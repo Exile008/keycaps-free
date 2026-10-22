@@ -116,6 +116,39 @@ for (const [id, info] of Object.entries(BUNDLED_FONTS)) {
   dispose(parts,result); empty.delete();
 }
 const font = loadFont(readFileSync(new URL('../fonts/inter-bold.ttf', import.meta.url)));
+
+console.log('KLP saddle tilted × legend modes × stem');
+{
+  const { cs } = fitted(font, 'A', 6);
+  for (const stemType of ['choc', 'mx']) {
+    for (const stemSeparate of [false, true]) {
+      for (const mode of ['inlay', 'recessed', 'raised', 'shine']) {
+        const p = { ...applyPreset({ ...DEFAULT_PARAMS, stemType, pitch: 18, pitchY: 17, gap: 0.5 }, 'klp-saddle', 'tilted'), legendMode: mode, stemSeparate };
+        const res = await buildModel(wasm, p, cs);
+        const label = `klp-saddle/tilted/${stemType}/${stemSeparate ? 'separate' : 'joined'}/${mode}`;
+        ok(res.cap.status() === 'NoError' && res.cap.volume() > 0, label + ' cap valid');
+        if (mode === 'recessed') ok(res.legend === null, label + ' single color');
+        else ok(res.legend && res.legend.status() === 'NoError' && res.legend.volume() > 0, label + ' legend valid');
+        ok(!!res.stem === stemSeparate, label + ' stem part presence');
+        disposeModel(res);
+      }
+    }
+  }
+  cs.delete();
+  const parts = buildKeycap(wasm, applyPreset(DEFAULT_PARAMS, 'klp', 'flat'));
+  const model = strFromU8(unzipSync(to3MF([{ name: 'Keycap', manifold: parts.capBody, color: '#1c1c1e' }],
+    { description: 'KLP Lamé–style (braindefender)' }))['3D/3dmodel.model']);
+  xmlStructure(model);
+  ok(model.includes('<metadata name="Description">KLP Lamé–style (braindefender)</metadata>'), '3MF description metadata');
+  const plain = strFromU8(unzipSync(to3MF([{ name: 'Keycap', manifold: parts.capBody, color: '#1c1c1e' }]))['3D/3dmodel.model']);
+  ok(!plain.includes('<metadata'), '3MF without metadata by default');
+  dispose(parts);
+  const round = projectFromJSON(projectToJSON({ params: { ...applyPreset(DEFAULT_PARAMS, 'klp-saddle', 'tilted'), stemType: 'choc', pitchY: 17, stemRotate: 90 }, legendSource: { kind: 'none' } }));
+  ok(round.params.dishType === 'klp-saddle' && round.params.pitchY === 17 && round.params.stemRotate === 90 && round.params.skirtStyle === 'rounded', 'KLP project round trip');
+  const old = projectFromJSON(JSON.stringify({ app: 'keycap-generator', version: 1, params: { pitch: 19.05 }, legendSource: { kind: 'none' } }));
+  ok(old.params.pitchY === null && old.params.skirtStyle === 'straight' && old.params.stemType === 'mx', 'old project loads with previous defaults');
+}
+
 const { cs: overflow } = fitted(font, 'A', 16);
 const parts = buildKeycap(wasm, DEFAULT_PARAMS), result = applyLegend(wasm, parts, overflow, parts.layout.params);
 ok(result.warnings.includes('warn.legendOverflow'), 'overflow warning');

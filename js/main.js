@@ -131,7 +131,7 @@ function setupViewer() {
   const vp = $('#viewport');
   if (vp) viewer = createViewer(vp);
   const tv = $('#topview');
-  if (tv) topview = createTopView(tv);
+  if (tv) topview = createTopView(tv, core.keycap || {});
 
   $$('.view-buttons .btn-seg').forEach((b) => {
     b.addEventListener('click', () => {
@@ -262,7 +262,7 @@ function fmtNum(v) {
   return s;
 }
 
-function toggleRow(key, labelKey, tipKey) {
+function toggleRow(key, labelKey, tipKey, values) {
   const row = el('div', 'prow prow-toggle');
   row.dataset.key = key;
   row.appendChild(labelFor(key, labelKey, tipKey));
@@ -274,12 +274,22 @@ function toggleRow(key, labelKey, tipKey) {
   track.appendChild(el('span', 'knob'));
   sw.appendChild(cb); sw.appendChild(track);
   row.appendChild(sw);
+  // `values` = { on, off } stores non-boolean values (e.g. stemRotate 90 / 0).
   cb.addEventListener('change', () => {
-    state.params[key] = cb.checked;
-    onParamChanged(key, cb.checked);
+    const v = values ? (cb.checked ? values.on : values.off) : cb.checked;
+    state.params[key] = v;
+    onParamChanged(key, v);
   });
-  ui.rows[key] = { kind: 'toggle', input: cb };
+  ui.rows[key] = { kind: 'toggle', input: cb, values };
   return row;
+}
+
+// Collapsible "Advanced" sub-section holding extra rows.
+function advancedBox(rows) {
+  const box = el('details', 'adv');
+  box.appendChild(i18nEl('summary', '', 'label.advanced'));
+  for (const r of rows) box.appendChild(r);
+  return box;
 }
 
 function selectRow(key, options, opts = {}) {
@@ -396,7 +406,9 @@ function syncRow(key) {
     if (row.num) row.num.value = fmtNum(v);
     if (row.slider) row.slider.value = v;
   } else if (row.kind === 'toggle') {
-    row.input.checked = !!v;
+    row.input.checked = row.values ? v === row.values.on : !!v;
+  } else if (row.kind === 'switchSize') {
+    row.select.value = switchSizeValue();
   } else if (row.kind === 'segmented') {
     $$('.seg', row.seg).forEach((b) => b.classList.toggle('is-active', b.dataset.value === v));
   } else if (row.kind === 'select') {
@@ -423,6 +435,40 @@ function updateStemVisibility() {
   }
   const color = ui.extraRows.stemColor;
   if (color) color.style.display = separate ? '' : 'none';
+  const p = state.params;
+  const show = (key, on) => { const r = ui.extraRows[key]; if (r) r.style.display = on ? '' : 'none'; };
+  show('chocAdv', p.stemType === 'choc');
+  show('stemZ', p.stemType !== 'choc');
+  show('stemRotate', p.stemType !== 'none');
+  show('homingType', !!p.homingBump);
+  show('skirtAdv', p.skirtStyle === 'rounded');
+  show('sculptAdv', isSculptedDish(p.dishType));
+  const credit = $('#klp-credit');
+  if (credit) credit.hidden = !isSculptedDish(p.dishType);
+}
+
+function isSculptedDish(type) {
+  return typeof type === 'string' && type.startsWith('klp');
+}
+
+// Switch / size quick selector: "<stemType>-<sizeStandard>".
+const SWITCH_SIZES = ['choc-choc', 'choc-mx', 'mx-mx', 'mx-choc'];
+const FALLBACK_SIZE_STANDARDS = {
+  mx: { pitch: 19.05, pitchY: 19.05, gap: 1.05 },
+  choc: { pitch: 18, pitchY: 17, gap: 0.5 },
+};
+function switchSizeValue() {
+  const p = state.params;
+  const v = `${p.stemType}-${p.sizeStandard}`;
+  return SWITCH_SIZES.includes(v) ? v : '__custom';
+}
+function applySwitchSize(value) {
+  const [stem, size] = value.split('-');
+  const std = ((core.params && core.params.SIZE_STANDARD_VALUES) || FALLBACK_SIZE_STANDARDS)[size];
+  if (!std) return;
+  Object.assign(state.params, std, { stemType: stem, sizeStandard: size });
+  refitRequested = true;
+  onParamChanged('sizeStandard', size);
 }
 
 // called by every control when its value changes
@@ -452,7 +498,12 @@ function buildStaticUI() {
     const famOpts = (core.params && core.params.PRESET_FAMILIES)
       ? core.params.PRESET_FAMILIES.map((f) => ({ value: f, key: 'preset.' + f }))
       : ['cherry', 'oem', 'sa', 'dsa', 'xda', 'flat'].map((f) => ({ value: f, key: 'preset.' + f }));
-    const famRow = selectRow('__family', famOpts, { labelKey: 'label.family', register: false, onChange: applySelectedPreset, noTip: true });
+    const onFamily = () => {
+      rebuildRowOptions(ui.family.value);
+      ui.rowSel.value = defaultRowFor(ui.family.value);
+      applySelectedPreset();
+    };
+    const famRow = selectRow('__family', famOpts, { labelKey: 'label.family', register: false, onChange: onFamily, noTip: true });
     famRow.dataset.key = '__family';
     profileBody.appendChild(famRow);
 
@@ -468,6 +519,19 @@ function buildStaticUI() {
     hint.id = 'preset-uniform-hint';
     hint.style.display = 'none';
     profileBody.appendChild(hint);
+
+    // Attribution required by the KLP Lamé author; a plain link, no fetch.
+    const credit = el('p', 'hint-sm klp-credit');
+    credit.id = 'klp-credit';
+    credit.hidden = true;
+    credit.appendChild(i18nEl('span', '', 'credit.klp'));
+    credit.appendChild(document.createTextNode(' '));
+    const link = i18nEl('a', '', 'credit.link');
+    link.href = 'https://github.com/braindefender/KLP-Lame-Keycaps';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    credit.appendChild(link);
+    profileBody.appendChild(credit);
 
     const custom = i18nEl('option', '', 'label.custom');
     custom.value = '__custom';
@@ -535,6 +599,18 @@ function buildStaticUI() {
     });
 
     sizeBody.appendChild(rangeRow('unitD', { unit: 'u' }));
+
+    const ssOpts = SWITCH_SIZES.map((v) => ({ value: v, key: 'switchSize.' + v }));
+    const ssRow = selectRow('__switchSize', ssOpts, {
+      labelKey: 'label.switchSize', tipKey: 'tip.switchSize', register: false, onChange: applySwitchSize,
+    });
+    const ssSel = ssRow.querySelector('select');
+    const ssCustom = i18nEl('option', '', 'opt.custom');
+    ssCustom.value = '__custom';
+    ssCustom.disabled = true;
+    ssSel.appendChild(ssCustom);
+    ui.rows.__switchSize = { kind: 'switchSize', select: ssSel };
+    sizeBody.appendChild(ssRow);
   }
 
   // ---- top face ----
@@ -584,7 +660,15 @@ function buildStaticUI() {
 
   // ---- corners ----
   const cor = $('#corners-body');
-  if (cor) { cor.appendChild(rangeRow('rBottom')); cor.appendChild(rangeRow('rTop')); }
+  if (cor) {
+    cor.appendChild(rangeRow('rBottom'));
+    cor.appendChild(rangeRow('rTop'));
+    cor.appendChild(segmentedRow('skirtStyle', [
+      { value: 'straight', key: 'skirt.straight' }, { value: 'rounded', key: 'skirt.rounded' },
+    ], { labelKey: 'label.skirtStyle', tipKey: 'tip.skirtStyle', withLabel: true }));
+    ui.extraRows.skirtAdv = advancedBox([rangeRow('skirtStraight'), rangeRow('skirtRadius')]);
+    cor.appendChild(ui.extraRows.skirtAdv);
+  }
 
   // ---- dish ----
   const dish = $('#dish-body');
@@ -593,8 +677,13 @@ function buildStaticUI() {
       { value: 'cylindrical', key: 'dish.cylindrical' },
       { value: 'spherical', key: 'dish.spherical' },
       { value: 'flat', key: 'dish.flat' },
+      { value: 'klp', key: 'dish.klp' },
+      { value: 'klp-thumb', key: 'dish.klpThumb' },
+      { value: 'klp-saddle', key: 'dish.klpSaddle' },
     ], { labelKey: 'label.dishType', tipKey: 'tip.dishType', withLabel: true }));
     dish.appendChild(rangeRow('dishDepth'));
+    ui.extraRows.sculptAdv = advancedBox([rangeRow('sculptRim'), rangeRow('sculptDrop')]);
+    dish.appendChild(ui.extraRows.sculptAdv);
   }
 
   // ---- shell ----
@@ -605,10 +694,15 @@ function buildStaticUI() {
   const stem = $('#stem-body');
   if (stem) {
     stem.appendChild(segmentedRow('stemType', [
-      { value: 'mx', key: 'stem.mx' }, { value: 'none', key: 'stem.none' },
+      { value: 'mx', key: 'stem.mx' }, { value: 'choc', key: 'stem.choc' }, { value: 'none', key: 'stem.none' },
     ], { labelKey: 'label.stemType', tipKey: 'tip.stemType', withLabel: true }));
+    ui.extraRows.stemRotate = toggleRow('stemRotate', null, null, { on: 90, off: 0 });
+    stem.appendChild(ui.extraRows.stemRotate);
     stem.appendChild(stepperRow('stemTolerance', 0.05));
-    stem.appendChild(rangeRow('stemZ'));
+    ui.extraRows.stemZ = rangeRow('stemZ');
+    stem.appendChild(ui.extraRows.stemZ);
+    ui.extraRows.chocAdv = advancedBox(['chocProngW', 'chocProngL', 'chocSpacing', 'chocProngZ'].map((k) => rangeRow(k)));
+    stem.appendChild(ui.extraRows.chocAdv);
     stem.appendChild(rangeRow('stemFillet'));
     stem.appendChild(segmentedRow('stemRibs', [
       { value: 'none', key: 'stemRibs.none' }, { value: 'cross', key: 'stemRibs.cross' },
@@ -624,6 +718,10 @@ function buildStaticUI() {
       { value: 'auto', key: 'stab.auto' }, { value: 'none', key: 'stab.none' },
     ], { labelKey: 'label.stabilizers', tipKey: 'tip.stabilizers', withLabel: true }));
     stem.appendChild(toggleRow('homingBump'));
+    ui.extraRows.homingType = segmentedRow('homingType', [
+      { value: 'bar', key: 'homing.bar' }, { value: 'dots3', key: 'homing.dots3' },
+    ], { labelKey: 'label.homingType', tipKey: 'tip.homingType', withLabel: true });
+    stem.appendChild(ui.extraRows.homingType);
   }
 
   // ---- right sidebar: placement / mode / colours ----
@@ -665,7 +763,36 @@ function buildStaticUI() {
   syncAllRows();
 }
 
-const PRESET_KEYS = ['dishType', 'dishDepth', 'insetL', 'insetR', 'insetF', 'insetB', 'rTop', 'height', 'tiltX'];
+const PRESET_KEYS_FALLBACK = ['dishType', 'dishDepth', 'insetL', 'insetR', 'insetF', 'insetB', 'rTop'];
+const presetKeys = () => [
+  ...((core.params && core.params.PRESET_PARAM_KEYS) || PRESET_KEYS_FALLBACK),
+  'height', 'tiltX', 'homingBump', 'homingType',
+];
+
+// Row list per family (R1–R4 for classic families, flat/tilted/homing for KLP).
+function rowsFor(family) {
+  const rows = core.params && core.params.presetRows ? core.params.presetRows(family) : [];
+  return rows.length ? rows : ['R1', 'R2', 'R3', 'R4'];
+}
+function defaultRowFor(family) {
+  const d = core.params && core.params.presetDefaultRow ? core.params.presetDefaultRow(family) : null;
+  return d || 'R3';
+}
+function rowKey(row) {
+  return /^R\d$/.test(row) ? row : 'row.' + row;
+}
+function rebuildRowOptions(family) {
+  if (!ui.rowSel) return;
+  const rows = rowsFor(family);
+  const current = rows.join();
+  if (ui.rowSel.dataset.rows === current) return;
+  ui.rowSel.dataset.rows = current;
+  ui.rowSel.replaceChildren(...rows.map((r) => {
+    const opt = i18nEl('option', '', rowKey(r));
+    opt.value = r;
+    return opt;
+  }));
+}
 
 function validPreset(value) {
   const presets = core.params && core.params.PRESETS;
@@ -678,7 +805,8 @@ function validPreset(value) {
 function syncPresetControls() {
   if (!ui.family || !ui.rowSel) return;
   ui.family.value = state.activePreset ? state.activePreset.family : '__custom';
-  ui.rowSel.value = state.activePreset && state.activePreset.row || 'R3';
+  rebuildRowOptions(ui.family.value);
+  ui.rowSel.value = state.activePreset && state.activePreset.row || defaultRowFor(ui.family.value);
   updatePresetRowVisibility();
   updatePresetBadge();
 }
@@ -692,8 +820,8 @@ function updatePresetBadge() {
   badge.hidden = !active;
   if (!active) { badge.textContent = ''; return; }
   const expected = core.params.applyPreset(state.params, active.family, active.row);
-  const custom = PRESET_KEYS.some((key) => expected[key] !== state.params[key]);
-  const name = t('preset.' + active.family) + (active.row ? ' ' + t(active.row) : '');
+  const custom = presetKeys().some((key) => expected[key] !== state.params[key]);
+  const name = t('preset.' + active.family) + (active.row ? ' ' + t(rowKey(active.row)) : '');
   badge.textContent = t(custom ? 'preset.customFrom' : 'preset.active', { name });
   badge.classList.toggle('is-custom', custom);
 }
@@ -1136,6 +1264,13 @@ async function ensureExportQuality() {
   return out;
 }
 
+// 3MF metadata: credit the KLP Lamé author when a sculpted KLP top is used.
+function exportMeta() {
+  return isSculptedDish(state.params.dishType)
+    ? { description: 'Keycap Generator - KLP Lamé–style shape (braindefender, https://github.com/braindefender/KLP-Lame-Keycaps)' }
+    : {};
+}
+
 async function export3MF() {
   if (!core.exporter || !core.exporter.to3MF) { setStatus('err.coreMissing', 'warn'); return; }
   const out = await ensureExportQuality();
@@ -1145,7 +1280,7 @@ async function export3MF() {
   if (out.result.legend) parts.push({ name: 'Legend', manifold: out.result.legend, color: state.params.legendColor });
   if (out.result.stem) parts.push({ name: 'Stem', manifold: out.result.stem, color: state.params.stemColor });
   try {
-    const bytes = core.exporter.to3MF(parts);
+    const bytes = core.exporter.to3MF(parts, exportMeta());
     const legend = state.legendSource.kind === 'text' ? state.legendSource.text : (state.legendSource.name || '');
     downloadBytes(bytes, `keycap_${state.params.unitW}u_${safeName(legend)}.3mf`, 'model/3mf');
   } catch (e) { setStatus('err.exportFailed', 'error'); }
@@ -1538,7 +1673,7 @@ async function exportBlank() {
     if (blank.stem && core.exporter.to3MF) {
       const parts = [{ name: 'Keycap', manifold: blank.cap, color: state.params.capColor }];
       parts.push({ name: 'Stem', manifold: blank.stem, color: state.params.stemColor });
-      const bytes = core.exporter.to3MF(parts);
+      const bytes = core.exporter.to3MF(parts, exportMeta());
       downloadBytes(bytes, `keycap_${state.params.unitW}u_blank.3mf`, 'model/3mf');
     } else if (core.exporter.toSTL) {
       const parts = [{ name: 'Keycap', manifold: blank.cap }];
@@ -1553,15 +1688,17 @@ async function exportBlank() {
 function resetSection(section) {
   const d = DEFAULTS();
   const keysBySection = {
-    profile: ['height', 'tiltX', 'tiltY', 'insetL', 'insetR', 'insetF', 'insetB', 'rBottom', 'rTop', 'dishType', 'dishDepth'],
-    size: ['unitW', 'unitD', 'gap'],
+    profile: ['height', 'tiltX', 'tiltY', 'insetL', 'insetR', 'insetF', 'insetB', 'rBottom', 'rTop', 'dishType', 'dishDepth',
+      'sculptRim', 'sculptDrop', 'skirtStyle', 'skirtStraight', 'skirtRadius', 'wall', 'topThickness'],
+    size: ['unitW', 'unitD', 'pitch', 'pitchY', 'gap', 'sizeStandard', 'stemType'],
     topface: ['insetL', 'insetR', 'insetF', 'insetB'],
     ext: ['extL', 'extR', 'extF', 'extB'],
     height: ['height', 'tiltX', 'tiltY'],
-    corners: ['rBottom', 'rTop'],
-    dish: ['dishType', 'dishDepth'],
+    corners: ['rBottom', 'rTop', 'skirtStyle', 'skirtStraight', 'skirtRadius'],
+    dish: ['dishType', 'dishDepth', 'sculptRim', 'sculptDrop'],
     shell: ['wall', 'topThickness'],
-    stem: ['stemType', 'stemTolerance', 'stemZ', 'stemFillet', 'stemRibs', 'ribThickness', 'ribHeight', 'stemSeparate', 'stabilizers', 'homingBump'],
+    stem: ['stemType', 'stemTolerance', 'stemZ', 'stemFillet', 'stemRibs', 'ribThickness', 'ribHeight', 'stemSeparate', 'stabilizers', 'homingBump',
+      'stemRotate', 'chocProngW', 'chocProngL', 'chocSpacing', 'chocProngZ', 'homingType'],
     placement: ['legendSize', 'legendDepth', 'legendRot', 'legendX', 'legendY', 'legendMirror'],
     mode: ['legendMode'],
     colors: ['capColor', 'legendColor', 'stemColor'],

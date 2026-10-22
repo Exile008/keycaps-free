@@ -125,7 +125,8 @@ section('presets × rows × sizes: fillet, ribs and separate stem');
     }
   }
   for (const family of Object.keys(PRESETS)) {
-    for (const row of ['R1', 'R2', 'R3', 'R4']) {
+    const klp = family.startsWith('klp');
+    for (const row of klp ? Object.keys(PRESETS[family].rows) : ['R1', 'R2', 'R3', 'R4']) {
       for (const unitW of SIZE_SET) {
         const base = { ...applyPreset(DEFAULT_PARAMS, family, row), unitW, stemFillet: 2 };
         const label = `${family}/${row}/${unitW}`;
@@ -545,6 +546,135 @@ section('buildModel');
 }
 
 // ---------------------------------------------------------------------------
+// FEAT-02: KLP Lamé–style caps, Choc stems and sizes (SPEC §10)
+const SIZE_STD = {
+  choc: { sizeStandard: 'choc', pitch: 18, pitchY: 17, gap: 0.5 },
+  mx: { sizeStandard: 'mx', pitch: 19.05, pitchY: 19.05, gap: 1.05 },
+};
+const COMBOS = [['choc', 'choc'], ['mx', 'mx'], ['choc', 'mx'], ['mx', 'choc']];
+const klpParams = (family, row, stem = 'choc', size = 'choc', extra = {}) =>
+  ({ ...applyPreset({ ...DEFAULT_PARAMS, ...SIZE_STD[size], stemType: stem }, family, row), ...extra });
+
+// Bounding box of `m` inside a small box around (x, y, z), or null if empty.
+function probe(m, [x, y, z], [hx, hy, hz]) {
+  const box = Manifold.cube([2 * hx, 2 * hy, 2 * hz], true).translate([x, y, z]);
+  const hit = m.intersect(box);
+  box.delete();
+  const res = hit.isEmpty() ? null : { vol: hit.volume(), ...hit.boundingBox() };
+  hit.delete();
+  return res;
+}
+
+section('KLP families × rows × switch/size × width × stem rotation');
+for (const family of ['klp', 'klp-thumb', 'klp-saddle']) {
+  for (const row of Object.keys(PRESETS[family].rows)) {
+    for (const [stem, size] of COMBOS) {
+      for (const unitW of [1, 1.5]) {
+        for (const stemRotate of [0, 90]) {
+          const tag = `${family}/${row}/${stem}-stem/${size}-size/${unitW}u/rot${stemRotate}`;
+          let res = null;
+          try {
+            res = await buildModel(wasm, klpParams(family, row, stem, size, { unitW, stemRotate }), null, { quality: 'preview' });
+            ok(res.cap.status() === 'NoError', `${tag} status`);
+            ok(res.cap.volume() > 0, `${tag} volume > 0`);
+          } catch (e) {
+            ok(false, `${tag} threw ${e && e.message}`);
+          }
+          disposeModel(res);
+        }
+      }
+    }
+  }
+}
+
+section('KLP sizes, heights and stem protrusion');
+{
+  const res = await buildModel(wasm, klpParams('klp', 'flat', 'choc', 'choc'), null, { quality: 'preview' });
+  const b = res.cap.boundingBox();
+  approx(b.max[0] - b.min[0], 17.5, 0.05, 'Choc 1u bbox X');
+  approx(b.max[1] - b.min[1], 16.5, 0.05, 'Choc 1u bbox Y');
+  approx(b.max[2], 5.65, 0.1, 'flat KLP max Z');
+  approx(b.min[2], -0.5, 0.01, 'Choc prongs reach z = -0.5');
+  disposeModel(res);
+  const mx = await buildModel(wasm, klpParams('klp', 'flat', 'mx', 'mx'), null, { quality: 'preview' });
+  const bm = mx.cap.boundingBox();
+  approx(bm.max[0] - bm.min[0], 18, 0.05, 'MX size 1u bbox X');
+  approx(bm.max[1] - bm.min[1], 18, 0.05, 'MX size 1u bbox Y');
+  approx(bm.min[2], 0, 0.01, 'MX stem does not protrude');
+  disposeModel(mx);
+  const n = normalizeParams({}).params;
+  ok(n.pitchY === null && n.skirtStyle === 'straight' && n.homingType === 'bar' && n.stemRotate === 0,
+    'old projects: new keys default to the previous behaviour');
+  ok(normalizeParams({ stemRotate: 90 }).params.stemRotate === 90 && normalizeParams({ stemRotate: 45 }).params.stemRotate === 0,
+    'stemRotate is 0 or 90');
+}
+
+section('sculptZ matches the measured KLP surface');
+{
+  const lay = computeLayout(klpParams('klp', 'flat'));
+  approx(lay.top.w, 14.62, 0.01, 'Choc 1u KLP top width');
+  approx(lay.top.d, 13.62, 0.01, 'Choc 1u KLP top depth');
+  const table = [
+    ['klp', 0, 0, 4.81], ['klp', 3, 0, 4.95], ['klp', 5, 0, 5.27], ['klp', 0, 3, 5.12],
+    ['klp', 3, 3, 5.19], ['klp', 5, 3, 5.43],
+    ['klp-thumb', 0, -3, 4.70], ['klp-thumb', 0, -5, 4.45], ['klp-thumb', 0, -7, 3.90],
+    ['klp-saddle', 0, 5, 4.45], ['klp-saddle', 0, 7, 3.90],
+  ];
+  for (const [family, x, y, z] of table) {
+    const l = computeLayout(klpParams(family, 'flat'));
+    approx(5.65 + dishSurfaceZ(l, x, y), z, 0.1, `${family} surface at (${x}, ${y})`);
+  }
+}
+
+section('KLP thumb / saddle edges');
+{
+  const edgeZ = (m, y) => { const h = probe(m, [0, y, 4], [0.5, 0.15, 4]); return h ? h.max[2] : NaN; };
+  const flat = await buildModel(wasm, klpParams('klp', 'flat'), null, { quality: 'preview' });
+  const thumb = await buildModel(wasm, klpParams('klp-thumb', 'flat'), null, { quality: 'preview' });
+  const saddle = await buildModel(wasm, klpParams('klp-saddle', 'flat'), null, { quality: 'preview' });
+  const e = 6.7;
+  ok(edgeZ(thumb.cap, e) - edgeZ(thumb.cap, -e) > 0.8, `thumb: front edge lower than back by > 0.8 (${edgeZ(thumb.cap, -e)} / ${edgeZ(thumb.cap, e)})`);
+  approx(edgeZ(saddle.cap, -e), edgeZ(saddle.cap, e), 0.05, 'saddle: front ≈ back');
+  ok(edgeZ(saddle.cap, e) < edgeZ(flat.cap, e) - 0.3, 'saddle edge below the normal rim');
+  for (const r of [flat, thumb, saddle]) disposeModel(r);
+}
+
+section('Choc prongs and rotation');
+{
+  const res = await buildModel(wasm, klpParams('klp', 'flat'), null, { quality: 'preview' });
+  for (const x of [-2.85, 2.85]) ok(probe(res.cap, [x, 0, 1.0], [0.2, 0.2, 0.2]), `prong material at (${x}, 0, 1)`);
+  ok(!probe(res.cap, [0, 0, 1.0], [0.2, 0.2, 0.2]), 'no material between the prongs');
+  disposeModel(res);
+  const rot = await buildModel(wasm, klpParams('klp', 'flat', 'choc', 'choc', { stemRotate: 90 }), null, { quality: 'preview' });
+  for (const y of [-2.85, 2.85]) ok(probe(rot.cap, [0, y, 1.0], [0.2, 0.2, 0.2]), `rotated prong material at (0, ${y}, 1)`);
+  ok(!probe(rot.cap, [2.85, 0, 1.0], [0.2, 0.2, 0.2]), 'rotated: nothing at (2.85, 0, 1)');
+  disposeModel(rot);
+  const sep = await buildModel(wasm, klpParams('klp', 'flat', 'choc', 'choc', { stemSeparate: true }), null, { quality: 'preview' });
+  ok(sep.stem && sep.stem.status() === 'NoError' && sep.stem.volume() > 0, 'Choc separate stem part');
+  ok(sep.cap.status() === 'NoError', 'Choc separate cap');
+  disposeModel(sep);
+  const wide = normalizeParams(klpParams('klp', 'flat', 'choc', 'choc', { unitW: 2 }));
+  ok(wide.warnings.includes('warn.chocStabs'), 'Choc ≥ 2u warns about stabilizers');
+  ok(computeLayout(wide.params).stems.length === 1, 'Choc ≥ 2u: centre stem only');
+  const ribs = normalizeParams(klpParams('klp', 'flat', 'choc', 'choc', { stemRibs: 'cross' }));
+  ok(ribs.warnings.includes('warn.chocRibs'), 'Choc + ribs warns');
+}
+
+section('KLP homing dots and rounded skirt');
+{
+  const p = klpParams('klp', 'homing');
+  const res = await buildModel(wasm, p, null, { quality: 'preview' });
+  const hit = probe(res.cap, [0, 0, 5], [0.3, 0.3, 1.5]);
+  const lay = computeLayout(p);
+  ok(hit && hit.max[2] > 5.65 + dishSurfaceZ(lay, 0, 0) + 0.2, `dots3 bump protrudes (${hit && hit.max[2]})`);
+  disposeModel(res);
+  const flat = await buildModel(wasm, klpParams('klp', 'flat'), null, { quality: 'export' });
+  const slice = probe(flat.cap, [0, 0, 3.0], [12, 2, 0.1]);
+  approx(slice.max[0], 8.57, 0.1, 'rounded skirt half-width at z = 3');
+  disposeModel(flat);
+}
+
+// ---------------------------------------------------------------------------
 section('performance');
 {
   // warm up
@@ -557,6 +687,15 @@ section('performance');
   console.log(`  default preview cap (stemFillet ${DEFAULT_PARAMS.stemFillet}): ${ms.toFixed(1)} ms, ${parts.capBody.numTri()} tris`);
   ok(ms < 50, `default preview cap < 50 ms (${ms.toFixed(1)})`);
   disposeParts(parts);
+
+  const kp = klpParams('klp-saddle', 'tilted');
+  disposeParts(buildKeycap(wasm, kp, { quality: 'preview' }));
+  const t1 = performance.now();
+  const klp = buildKeycap(wasm, kp, { quality: 'preview' });
+  const ms1 = performance.now() - t1;
+  console.log(`  KLP saddle tilted preview cap: ${ms1.toFixed(1)} ms, ${klp.capBody.numTri()} tris`);
+  ok(ms1 < 250, `KLP preview cap < 250 ms (${ms1.toFixed(1)})`);
+  disposeParts(klp);
 }
 
 // ---------------------------------------------------------------------------

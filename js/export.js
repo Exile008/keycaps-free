@@ -40,7 +40,10 @@ function color(hex) {
   return hex.toUpperCase() + (hex.length === 7 ? 'FF' : '');
 }
 
-export function to3MF(parts) {
+// meta.description (optional) becomes <metadata name="Description">.
+export function to3MF(parts, meta = {}) {
+  const metadata = typeof meta.description === 'string' && meta.description
+    ? `<metadata name="Description">${xml(meta.description)}</metadata>` : '';
   const bases = parts.map(p => `<base name="${xml(p.name)}" displaycolor="${color(p.color)}"/>`).join('');
   const objects = parts.map((p, i) => {
     const { positions: v, indices: t } = meshData(p.manifold);
@@ -50,7 +53,7 @@ export function to3MF(parts) {
     return `<object id="${i + 2}" type="model" name="${xml(p.name)}" pid="1" pindex="${i}"><mesh><vertices>${vertices}</vertices><triangles>${triangles}</triangles></mesh></object>`;
   }).join('');
   const parent = parts.length + 2;
-  const model = `<?xml version="1.0" encoding="UTF-8"?><model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources><basematerials id="1">${bases}</basematerials>${objects}<object id="${parent}" type="model" name="Keycap"><components>${parts.map((_, i) => `<component objectid="${i + 2}"/>`).join('')}</components></object></resources><build><item objectid="${parent}"/></build></model>`;
+  const model = `<?xml version="1.0" encoding="UTF-8"?><model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">${metadata}<resources><basematerials id="1">${bases}</basematerials>${objects}<object id="${parent}" type="model" name="Keycap"><components>${parts.map((_, i) => `<component objectid="${i + 2}"/>`).join('')}</components></object></resources><build><item objectid="${parent}"/></build></model>`;
   return zipSync({
     '[Content_Types].xml': strToU8('<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>'),
     '_rels/.rels': strToU8('<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>'),

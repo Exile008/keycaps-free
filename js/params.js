@@ -7,7 +7,9 @@ export const DEFAULT_PARAMS = {
   unitW: 1,
   unitD: 1,
   pitch: 19.05,
+  pitchY: null,          // null = same as pitch (Choc: 17)
   gap: 1.05,
+  sizeStandard: 'mx',    // UI helper: 'mx' | 'choc' | 'custom'
   // bottom footprint per-side extension (mm)
   extL: 0, extR: 0, extF: 0, extB: 0,
   // top face per-side inset (mm)
@@ -19,9 +21,15 @@ export const DEFAULT_PARAMS = {
   // corners
   rBottom: 0.6,
   rTop: 2.0,
+  // skirt profile
+  skirtStyle: 'straight',
+  skirtStraight: 1.5,
+  skirtRadius: 6.7,
   // dish
   dishType: 'cylindrical',
   dishDepth: 0.8,
+  sculptRim: 0.86,
+  sculptDrop: 0.85,
   // shell
   wall: 1.5,
   topThickness: 1.5,
@@ -34,6 +42,12 @@ export const DEFAULT_PARAMS = {
   stemCrossDepth: 4.0,
   stemTolerance: 0,
   stemZ: 0.0,
+  stemRotate: 0,
+  // Kailh Choc v1 prongs
+  chocProngW: 1.2,
+  chocProngL: 3.0,
+  chocSpacing: 5.7,
+  chocProngZ: -0.5,
   // stem/top reinforcement
   stemFillet: 1.0,
   stemRibs: 'none',
@@ -44,6 +58,7 @@ export const DEFAULT_PARAMS = {
   stemColor: '#f2f2f2',
   stabilizers: 'auto',
   homingBump: false,
+  homingType: 'bar',
   // legend
   legendMode: 'inlay',
   legendSize: 8,
@@ -61,6 +76,7 @@ export const DEFAULT_PARAMS = {
 export const PARAM_RANGES = {
   unitW: { min: 1, max: 7, step: 0.25 },
   unitD: { min: 1, max: 3, step: 0.25 },
+  pitchY: { min: 15, max: 20, step: 0.05 },
   gap: { min: 0, max: 3, step: 0.05 },
   extL: { min: -3, max: 6, step: 0.1 },
   extR: { min: -3, max: 6, step: 0.1 },
@@ -73,15 +89,23 @@ export const PARAM_RANGES = {
   height: { min: 3, max: 18, step: 0.1 },
   tiltX: { min: -20, max: 20, step: 0.5 },
   tiltY: { min: -20, max: 20, step: 0.5 },
-  rBottom: { min: 0.1, max: 4, step: 0.1 },
+  rBottom: { min: 0.1, max: 6, step: 0.1 },
   rTop: { min: 0.1, max: 6, step: 0.1 },
   dishDepth: { min: 0, max: 2.5, step: 0.05 },
+  sculptRim: { min: 0.3, max: 3, step: 0.01 },
+  sculptDrop: { min: 0, max: 3, step: 0.05 },
+  skirtStraight: { min: 0, max: 4, step: 0.1 },
+  skirtRadius: { min: 2, max: 20, step: 0.1 },
   wall: { min: 0.8, max: 3, step: 0.05 },
   topThickness: { min: 0.8, max: 4, step: 0.05 },
   stemOuterD: { min: 4.5, max: 6.5, step: 0.1 },
   stemCrossDepth: { min: 3.6, max: 6, step: 0.1 },
   stemTolerance: { min: -0.2, max: 0.3, step: 0.05 },
   stemZ: { min: 0, max: 3, step: 0.1 },
+  chocProngW: { min: 0.7, max: 1.7, step: 0.05 },
+  chocProngL: { min: 2.5, max: 3.5, step: 0.05 },
+  chocSpacing: { min: 5.2, max: 6.2, step: 0.05 },
+  chocProngZ: { min: -1, max: 0, step: 0.05 },
   stemFillet: { min: 0, max: 3, step: 0.1 },
   ribThickness: { min: 0.6, max: 2.0, step: 0.05 },
   ribHeight: { min: 0.5, max: 6, step: 0.1 },
@@ -94,8 +118,18 @@ export const PARAM_RANGES = {
 
 export const SIZE_LIST = [1, 1.25, 1.5, 1.75, 2, 2.25, 2.75, 3, 6, 6.25, 7];
 
-const DISH_TYPES = ['cylindrical', 'spherical', 'flat'];
-const STEM_TYPES = ['mx', 'none'];
+export const SCULPT_TYPES = ['klp', 'klp-thumb', 'klp-saddle'];
+const DISH_TYPES = ['cylindrical', 'spherical', 'flat', ...SCULPT_TYPES];
+const STEM_TYPES = ['mx', 'choc', 'none'];
+const SIZE_STANDARDS = ['mx', 'choc', 'custom'];
+const SKIRT_STYLES = ['straight', 'rounded'];
+const HOMING_TYPES = ['bar', 'dots3'];
+
+// pitch / pitchY / gap set by the size-standard helper (SPEC §10).
+export const SIZE_STANDARD_VALUES = {
+  mx: { pitch: 19.05, pitchY: 19.05, gap: 1.05 },
+  choc: { pitch: 18, pitchY: 17, gap: 0.5 },
+};
 const STAB_MODES = ['auto', 'none'];
 const STEM_RIBS = ['none', 'cross'];
 const LEGEND_MODES = ['inlay', 'recessed', 'raised', 'shine'];
@@ -149,8 +183,49 @@ export const PRESETS = {
   },
 };
 
+// KLP Lamé–style low-profile families, shaped after braindefender's KLP Lamé
+// (https://github.com/braindefender/KLP-Lame-Keycaps). This is a parametric
+// re-creation; none of the author's meshes are bundled.
+const KLP_COMMON = {
+  dishDepth: 0.85, sculptRim: 0.86, sculptDrop: 0.85,
+  insetL: 1.44, insetR: 1.44, insetF: 1.44, insetB: 1.44,
+  rTop: 3.2, rBottom: 4.3,
+  skirtStyle: 'rounded', skirtStraight: 1.5, skirtRadius: 6.7,
+  wall: 0.9, topThickness: 1.5,
+};
+const KLP_ROWS = {
+  flat: { height: 5.65, tiltX: 0, homingBump: false },
+  tilted: { height: 7.45, tiltX: 15, homingBump: false },
+  homing: { height: 5.65, tiltX: 0, homingBump: true, homingType: 'dots3' },
+};
+PRESETS.klp = { dishType: 'klp', ...KLP_COMMON, rows: { ...KLP_ROWS }, defaultRow: 'flat' };
+PRESETS['klp-thumb'] = { dishType: 'klp-thumb', ...KLP_COMMON, rows: { flat: KLP_ROWS.flat }, defaultRow: 'flat' };
+PRESETS['klp-saddle'] = { dishType: 'klp-saddle', ...KLP_COMMON, rows: { ...KLP_ROWS }, defaultRow: 'flat' };
+
+// Keys a preset may set besides its row keys. Everything else is kept.
+export const PRESET_PARAM_KEYS = [
+  'dishType', 'dishDepth', 'insetL', 'insetR', 'insetF', 'insetB', 'rTop',
+  'rBottom', 'sculptRim', 'sculptDrop', 'skirtStyle', 'skirtStraight', 'skirtRadius',
+  'wall', 'topThickness',
+];
+
 export const PRESET_FAMILIES = Object.keys(PRESETS);
 export const PRESET_ROWS = ['R1', 'R2', 'R3', 'R4'];
+
+export function isKlpFamily(family) {
+  return typeof family === 'string' && family.startsWith('klp');
+}
+
+export function presetRows(family) {
+  const preset = PRESETS[family];
+  return preset && preset.rows ? Object.keys(preset.rows) : [];
+}
+
+export function presetDefaultRow(family) {
+  const preset = PRESETS[family];
+  if (!preset || !preset.rows) return null;
+  return preset.defaultRow || (preset.rows.R3 ? 'R3' : Object.keys(preset.rows)[0]);
+}
 
 function num(v, fallback) {
   const n = typeof v === 'number' ? v : Number(v);
@@ -190,9 +265,21 @@ export function normalizeParams(input) {
     }
   }
 
+  // pitchY: null (= pitch) or a number
+  if (src.pitchY === undefined || src.pitchY === null || src.pitchY === '') {
+    p.pitchY = null;
+  } else {
+    const n = num(src.pitchY, NaN);
+    p.pitchY = Number.isFinite(n) ? n : null;
+  }
+
   // enum validation
   if (!DISH_TYPES.includes(p.dishType)) p.dishType = DEFAULT_PARAMS.dishType;
   if (!STEM_TYPES.includes(p.stemType)) p.stemType = DEFAULT_PARAMS.stemType;
+  if (!SIZE_STANDARDS.includes(p.sizeStandard)) p.sizeStandard = DEFAULT_PARAMS.sizeStandard;
+  if (!SKIRT_STYLES.includes(p.skirtStyle)) p.skirtStyle = DEFAULT_PARAMS.skirtStyle;
+  if (!HOMING_TYPES.includes(p.homingType)) p.homingType = DEFAULT_PARAMS.homingType;
+  p.stemRotate = Math.round(((p.stemRotate % 180) + 180) % 180) === 90 ? 90 : 0;
   if (!STAB_MODES.includes(p.stabilizers)) p.stabilizers = DEFAULT_PARAMS.stabilizers;
   if (!STEM_RIBS.includes(p.stemRibs)) p.stemRibs = DEFAULT_PARAMS.stemRibs;
   if (!LEGEND_MODES.includes(p.legendMode)) p.legendMode = DEFAULT_PARAMS.legendMode;
@@ -212,7 +299,7 @@ export function normalizeParams(input) {
 
   // ---- derived constraints (warnings + safe clamps) ----
   const bottomW = p.unitW * p.pitch - p.gap + p.extL + p.extR;
-  const bottomD = p.unitD * p.pitch - p.gap + p.extF + p.extB;
+  const bottomD = p.unitD * (p.pitchY ?? p.pitch) - p.gap + p.extF + p.extB;
 
   // wall vs inner body
   let innerW = bottomW - 2 * p.wall;
@@ -270,6 +357,12 @@ export function normalizeParams(input) {
     if (!warnings.includes('warn.topTooThick')) warnings.push('warn.topTooThick');
   }
 
+  // Choc stems: centre prongs only (no stabilizers or ribs yet)
+  if (p.stemType === 'choc' && p.stabilizers === 'auto' && Math.max(p.unitW, p.unitD) >= 2) {
+    warnings.push('warn.chocStabs');
+  }
+  if (p.stemType === 'choc' && p.stemRibs === 'cross') warnings.push('warn.chocRibs');
+
   // wall thinness under tilt
   if ((Math.abs(p.tiltX) >= 12 || Math.abs(p.tiltY) >= 12) && p.wall < 1.2) {
     warnings.push('warn.wallThinTilt');
@@ -279,27 +372,23 @@ export function normalizeParams(input) {
 }
 
 // §4.3 — apply a family/row preset, keeping legend/colour/size/ext/stem.
+// KLP families also set rBottom, the skirt, the sculpt keys, the shell and
+// (per row) the homing bump; classic families switch the skirt back to straight.
 export function applyPreset(params, family, row) {
   const base = { ...DEFAULT_PARAMS, ...(params || {}) };
   const preset = PRESETS[family];
   if (!preset) return base;
   const next = { ...base };
-  next.dishType = preset.dishType;
-  next.dishDepth = preset.dishDepth;
-  next.insetL = preset.insetL;
-  next.insetR = preset.insetR;
-  next.insetF = preset.insetF;
-  next.insetB = preset.insetB;
-  next.rTop = preset.rTop;
+  for (const key of PRESET_PARAM_KEYS) {
+    if (Object.hasOwn(preset, key)) next[key] = preset[key];
+  }
+  if (!isKlpFamily(family)) next.skirtStyle = 'straight';
   if (preset.uniform) {
     next.height = preset.uniform.height;
     next.tiltX = preset.uniform.tiltX;
   } else if (preset.rows) {
-    const r = preset.rows[row] || preset.rows.R3;
-    if (r) {
-      next.height = r.height;
-      next.tiltX = r.tiltX;
-    }
+    const r = preset.rows[row] || preset.rows[presetDefaultRow(family)];
+    if (r) Object.assign(next, r);
   }
   const { params: normalized } = normalizeParams(next);
   return normalized;

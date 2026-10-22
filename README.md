@@ -15,6 +15,7 @@
 - 嵌入双色、凹刻、凸起、透光四种模式；主体/字符颜色。
 - 高精度 3MF、主体/字符/合并 STL、真正无字符的空白 STL；工程 JSON 保存/载入（含自定义字体及所选 SVG），Ctrl+S 保存。
 - 中英切换、深浅主题；浏览器自动保存参数和文字，不在自动会话中保存上传字体或 SVG。工程 JSON 用于携带这些资源。
+- KLP Lamé 风格矮轴键帽：KLP 常规 / 拇指 / 马鞍三个系列（平置、倾斜 15°、三点定位），雕刻凹面、圆弧侧裙；Kailh Choc v1 双脚轴心（可旋转 90°），以及“轴体 / 尺寸”快速切换（Choc 或 MX 轴 × Choc 18×17 或 MX 19.05 键距）。全部为参数化重建，可与所有滑块、字符模式和导出配合使用。
 - <img width="2400" height="1429" alt="v2ex-2-light" src="https://github.com/user-attachments/assets/6e1e6da6-0253-44b9-a000-b13119349f68" />
 
 
@@ -32,7 +33,7 @@
 
 ### 致谢
 
-vostoklabs 的 SVG-keycap-generator 原始创意；zk_phi 的参数化键帽文章；three.js、manifold-3d、opentype.js、fflate。内置 Inter、JetBrains Mono、Orbitron、Bebas Neue 字体遵循 SIL Open Font License（OFL），许可证见随附字体文件。所有库与字体均由本地 `vendor/`、`fonts/` 提供，无 CDN。
+vostoklabs 的 SVG-keycap-generator 原始创意；zk_phi 的参数化键帽文章；KLP 系列造型参考 braindefender 的 [KLP Lamé Keycaps](https://github.com/braindefender/KLP-Lame-Keycaps)（参数化重建，未包含原作者模型文件）；three.js、manifold-3d、opentype.js、fflate。内置 Inter、JetBrains Mono、Orbitron、Bebas Neue 字体遵循 SIL Open Font License（OFL），许可证见随附字体文件。所有库与字体均由本地 `vendor/`、`fonts/` 提供，无 CDN。
 
 ## English
 
@@ -42,7 +43,7 @@ An offline, no-build parametric keycap editor. Double-click `start.bat`, leave i
 
 ### Features
 
-Three-column live editor, 3D orbit/zoom/pan, Iso/Top/Front/Side views, frame control, top and Y–Z profile diagrams; approximate Cherry/OEM/SA/DSA/XDA/flat presets and row selection; standard/custom widths; independent top insets and footprint extensions; linked L/R insets, height, pitch/roll, corners, dish, shell, MX tolerance, stabilizers and homing bar. Text (up to six characters), imported TTF/OTF fonts and multiple SVG uploads support size/depth/rotation/offset/mirror placement. Four legend modes, two colours, export-quality 3MF and separate/merged/blank STL downloads are available.
+Three-column live editor, 3D orbit/zoom/pan, Iso/Top/Front/Side views, frame control, top and Y–Z profile diagrams; approximate Cherry/OEM/SA/DSA/XDA/flat presets and row selection; standard/custom widths; independent top insets and footprint extensions; linked L/R insets, height, pitch/roll, corners, dish, shell, MX tolerance, stabilizers and homing bar. Text (up to six characters), imported TTF/OTF fonts and multiple SVG uploads support size/depth/rotation/offset/mirror placement. Four legend modes, two colours, export-quality 3MF and separate/merged/blank STL downloads are available. KLP Lamé–style low-profile caps: KLP Normal / Thumb / Saddle families (flat, 15° tilted and 3-dot homing rows) with a sculpted recess and a rounded skirt, Kailh Choc v1 prong stems (optionally rotated 90°) and a "Switch / size" quick selector (Choc or MX stem × Choc 18×17 or MX 19.05 spacing). They are parametric re-creations and work with every slider, legend mode and export.
 
 Save/load project JSON embeds custom fonts and the selected SVG. Ctrl+S saves a project. Automatic browser persistence stores parameters and text only, not uploaded files. Language and theme preferences are persisted separately. Dark is the initial theme; language follows the browser unless previously selected.
 
@@ -58,4 +59,4 @@ Exports rebuild at export quality. 3MF groups cap and legend into one object wit
 
 ### Credits
 
-Original idea: vostoklabs / SVG-keycap-generator. Parametric geometry inspiration: zk_phi's article. Libraries: three.js, manifold-3d, opentype.js, fflate. Bundled Inter, JetBrains Mono, Orbitron and Bebas Neue fonts use SIL OFL; see accompanying font licences. All runtime assets are local under `vendor/` and `fonts/`, with no CDN requests.
+Original idea: vostoklabs / SVG-keycap-generator. Parametric geometry inspiration: zk_phi's article. KLP family shapes are based on [KLP Lamé Keycaps](https://github.com/braindefender/KLP-Lame-Keycaps) by braindefender (re-created parametrically; the author's model files are not included). Libraries: three.js, manifold-3d, opentype.js, fflate. Bundled Inter, JetBrains Mono, Orbitron and Bebas Neue fonts use SIL OFL; see accompanying font licences. All runtime assets are local under `vendor/` and `fonts/`, with no CDN requests.

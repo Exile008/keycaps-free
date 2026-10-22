@@ -7,7 +7,8 @@ param(
   [Parameter(Mandatory=$true)][ValidateSet('T1','T2','T3','FIX')][string]$Task,
   [string]$Model = '',
   [string]$FixFile = '',
-  [string]$Agent = 'build'
+  [string]$Agent = 'build',
+  [switch]$NoPure
 )
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath (Split-Path -Parent $MyInvocation.MyCommand.Path)
@@ -37,14 +38,19 @@ else {
 }
 $oc = [pscustomobject]@{ Source = $exe }
 
-# Use the built-in "build" agent: orchestrator agents (e.g. oh-my-opencode Sisyphus) delegate to
-# background sub-agents, and `opencode run` exits as soon as the main turn ends, killing them.
+# oh-my-opencode turns the built-in "build" agent into a sub-agent and falls back to its "Sisyphus"
+# orchestrator, which delegates everything to background sub-agents. Those die (or time out) under
+# `opencode run`. `--pure` skips external plugins for this run only, so "build" stays a primary agent
+# that does the work itself. Your opencode config is not changed. Use -NoPure to turn this off.
 $prompt += ' Do all the work yourself in this session: do NOT delegate to sub-agents or background tasks, and do not stop until the report file is written.'
-$ocArgs = @('run', '--agent', $Agent)
+$ocArgs = @('run')
+if (-not $NoPure) { $ocArgs += '--pure' }
+$ocArgs += @('--agent', $Agent)
 if ($Model) { $ocArgs += @('-m', $Model) }
 $ocArgs += $prompt
+$startTime = Get-Date
 
-$reportName = if ($Task -eq 'FIX') { 'REPORT-' + ([IO.Path]::GetFileNameWithoutExtension($FixFile) -replace '^(FIX-\d+).*','$1') + '.md' } else { "REPORT-$Task.md" }
+$reportName = if ($Task -eq 'FIX') { 'REPORT-' + ([IO.Path]::GetFileNameWithoutExtension($FixFile) -replace '^((FIX|FEAT)-\d+).*','$1') + '.md' } else { "REPORT-$Task.md" }
 $report = Join-Path (Get-Location) "docs\$reportName"
 $before = if (Test-Path $report) { (Get-Item $report).LastWriteTime } else { $null }
 
@@ -58,8 +64,21 @@ try {
 } finally { $writer.Close() }
 $code = $LASTEXITCODE
 Write-Host "opencode exit code: $code" -ForegroundColor Yellow
-if ((Test-Path $report) -and ((-not $before) -or (Get-Item $report).LastWriteTime -gt $before)) {
+$changed = @(Get-ChildItem -Path js, css, tests, index.html -Recurse -File -ErrorAction SilentlyContinue |
+  Where-Object { $_.LastWriteTime -gt $startTime })
+$reportNew = (Test-Path $report) -and ((-not $before) -or (Get-Item $report).LastWriteTime -gt $before)
+$reportFailed = $reportNew -and (Select-String -Path $report -Pattern '— incomplete|not implemented or validated|未完成本次' -Quiet)
+if (Select-String -Path $log -Pattern 'is a subagent, not a primary agent' -Quiet) {
+  Write-Host "WARNING: opencode fell back to another (orchestrator) agent. Try without -NoPure, or pass -Agent <your primary agent>." -ForegroundColor Red
+}
+Write-Host ("Source files changed: {0}" -f $changed.Count) -ForegroundColor Yellow
+$changed | ForEach-Object { Write-Host ("  " + $_.FullName.Substring((Get-Location).Path.Length + 1)) }
+if ($reportNew -and -not $reportFailed -and $changed.Count -gt 0) {
   Write-Host "Report written: docs\$reportName. Tell Claude: '$Task finished'." -ForegroundColor Green
+} elseif ($reportFailed) {
+  Write-Host "FAILED: the agent's own report (docs\$reportName) says the task was not completed. See $log." -ForegroundColor Red
+} elseif ($changed.Count -eq 0) {
+  Write-Host "FAILED: no source files were changed - nothing was implemented. See $log." -ForegroundColor Red
 } else {
-  Write-Host "WARNING: docs\$reportName was not written - the agent probably stopped early. Check $log, or run opencode interactively and paste the prompt." -ForegroundColor Red
+  Write-Host "WARNING: docs\$reportName was not written - the agent probably stopped early. Check $log." -ForegroundColor Red
 }

@@ -30,7 +30,9 @@ function label(x, y, text, anchor = 'middle') {
   return `<text x="${x}" y="${y}" text-anchor="${anchor}" dominant-baseline="middle">${esc(text)}</text>`;
 }
 
-export function createTopView(container) {
+// `geom` = core.keycap (optional): its dishSurfaceZ draws the dish/sculpt line.
+export function createTopView(container, geom = {}) {
+  const dishSurfaceZ = typeof geom.dishSurfaceZ === 'function' ? geom.dishSurfaceZ : null;
   let state = null;
   let collapsed = false;
   try { collapsed = localStorage.getItem('kcg-diagram-collapsed') === 'true'; } catch (_) { /* ignore */ }
@@ -88,7 +90,19 @@ export function createTopView(container) {
     }
     svg.push(`<polygon class="diagram-top" points="${outline.join(' ')}"/>`);
 
-    if (p.stemType !== 'none') {
+    if (p.stemType === 'choc') {
+      // Two Choc prongs per stem position (rotated 90° when stemRotate is set).
+      const rot = p.stemRotate === 90;
+      const w = (rot ? p.chocProngL : p.chocProngW) * scale;
+      const l = (rot ? p.chocProngW : p.chocProngL) * scale;
+      for (const [sx, sy] of layout.stems || [[0, 0]]) {
+        for (const s of [-1, 1]) {
+          const cx = sx + (rot ? 0 : s * p.chocSpacing / 2);
+          const cy = sy + (rot ? s * p.chocSpacing / 2 : 0);
+          svg.push(`<rect class="diagram-stem" x="${X(cx) - w / 2}" y="${Y(cy) - l / 2}" width="${w}" height="${l}" rx="${0.35 * scale}"/>`);
+        }
+      }
+    } else if (p.stemType !== 'none') {
       for (const [sx, sy] of layout.stems || [[0, 0]]) {
         const x = X(sx), y = Y(sy), k = 1.5 * scale;
         svg.push(`<circle class="diagram-stem" cx="${x}" cy="${y}" r="${p.stemOuterD / 2 * scale}"/>`);
@@ -123,7 +137,45 @@ export function createTopView(container) {
     const fx = X(front[1]), fy = Z(front[2]);
     const bx = X(back[1]), by = Z(back[2]);
     const svg = [];
-    svg.push(`<path class="diagram-top" d="M8 ${baseline}H${width - 8}L${bx} ${by}L${fx} ${fy}Z"/>`);
+    // Outline: back skirt up, top surface (dish / sculpt) back → front, front skirt down.
+    // Classic dishes keep the rim silhouette; KLP tops show the centre section,
+    // and their thumb/saddle cut also shaves the skirt beyond the top edge.
+    const sculpted = !!dishSurfaceZ && String(p.dishType).startsWith('klp');
+    const surf = (ly) => (sculpted ? dishSurfaceZ(layout, 0, ly) : 0);
+    const { R: Rm, origin: o } = layout.frame;
+    const toLocal = (y, z) => {
+      const dy = y - o[1], dz = z - o[2], dx = -o[0];
+      return [Rm[0][1] * dx + Rm[1][1] * dy + Rm[2][1] * dz, Rm[0][2] * dx + Rm[1][2] * dy + Rm[2][2] * dz];
+    };
+    // Skirt from the footprint edge up to the rim point (straight or arc),
+    // stopped where it meets the top surface. Returns [points, local y of the stop].
+    const skirt = (by0, rim, sign) => {
+      const out = [[by0, 0]];
+      const rounded = p.skirtStyle === 'rounded';
+      const zs = rounded ? Math.max(0, Math.min(p.skirtStraight, rim[2] - 0.2)) : 0;
+      const dz = rim[2] - zs;
+      const R = Math.max(p.skirtRadius, dz + 1e-3);
+      if (zs > 0) out.push([by0, zs]);
+      for (let k = 1; k <= 24; k++) {
+        const tt = k / 24;
+        const f = rounded && dz > 1e-6 ? (R - Math.sqrt(R * R - (tt * dz) ** 2)) / (R - Math.sqrt(R * R - dz * dz)) : tt;
+        const pt = [by0 + (rim[1] - by0) * f, zs + dz * tt];
+        const [ly, lz] = toLocal(pt[0], pt[1]);
+        if (lz > surf(ly) + 1e-6) return [out, Math.max(sign * ly, 0) * sign];
+        out.push(pt);
+      }
+      return [out, sign * top.d / 2];
+    };
+    const [backSkirt, lyBack] = skirt(b.y1, back, 1);
+    const [frontSkirt, lyFront] = skirt(b.y0, front, -1);
+    const pts = [...backSkirt];
+    for (let i = 0; i <= 32; i++) {
+      const ly = lyBack + (lyFront - lyBack) * (i / 32);
+      const w = toWorld(layout.frame, [0, ly, surf(ly)]);
+      pts.push([w[1], w[2]]);
+    }
+    pts.push(...frontSkirt.reverse());
+    svg.push(`<path class="diagram-top" d="M${pts.map(([y, z]) => `${X(y).toFixed(1)} ${Z(z).toFixed(1)}`).join('L')}Z"/>`);
     svg.push(`<path class="diagram-bottom" d="M8 ${baseline}H${width - 8}"/>`);
 
     const hx = X(0), hy = Z(p.height);
