@@ -25,3 +25,4 @@
 - 许可证：自带依赖均允许再分发 —— three.js / opentype.js / fflate (MIT)、manifold-3d (Apache-2.0)、字体 (SIL OFL 1.1)，各自 LICENSE 已在 `vendor/`、`fonts/` 中。
   本项目代码为独立实现，未复制 vostoklabs 原项目源码（其为 CC BY-NC-ND）；README 中保留了致谢。请为你自己的代码选择一个许可证（例如 MIT）并添加 `LICENSE` 文件。
 - 本地离线使用不受影响，仍可用 `start.bat`。
+- 缓存：GitHub Pages 让浏览器把每个文件缓存 10 分钟，发布后浏览器可能混用新旧 JS 模块（例如新 main.js 配旧 keycap.js）。为避免这种情况，发布时 `.github/scripts/stamp-version.mjs` 会给入口脚本、样式表和所有 `js/` 模块加上 `?v=<commit>`（js 模块通过 import map 重定向），每次发布都加载一套一致的文件。仓库里的 `index.html` 不变，本地运行不受影响。

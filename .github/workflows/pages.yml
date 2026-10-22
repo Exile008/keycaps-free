@@ -35,6 +35,8 @@ jobs:
           mkdir _site
           cp -r index.html css js vendor fonts _site/
           touch _site/.nojekyll
+          # Version-tag module URLs so browsers never mix cached old and new modules.
+          node .github/scripts/stamp-version.mjs _site "${GITHUB_SHA::12}"
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
