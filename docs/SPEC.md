@@ -82,10 +82,10 @@ Origin = switch centre on the keycap's bottom plane. **+X = right, +Y = back (aw
 | `wall` | 1.5 | 0.8–3 | side wall thickness |
 | `topThickness` | 1.5 | 0.8–4 | top thickness (measured along Z at centre) |
 | `stemType` | `'mx'` | `'mx' \| 'none'` | |
-| `stemOuterD` | 5.5 | 4.5–6.5 | |
-| `stemCrossLen` | 4.0 | | cross arm length (both arms) |
-| `stemCrossH` | 1.25 | | width (in X) of the Y-direction bar |
-| `stemCrossV` | 1.10 | | width (in Y) of the X-direction bar |
+| `stemOuterD` | 6.05 | 4.5–6.5 | MX stem defaults are 110 % of nominal (5.5 / 4.0 / 1.25 / 1.10) in X/Y for print fit |
+| `stemCrossLen` | 4.4 | | cross arm length (both arms) |
+| `stemCrossH` | 1.375 | | width (in X) of the Y-direction bar |
+| `stemCrossV` | 1.21 | | width (in Y) of the X-direction bar |
 | `stemCrossDepth` | 4.0 | 3.6–6 | depth of cross hole from stem bottom |
 | `stemTolerance` | 0 | −0.2…+0.3 | added to `stemCrossH` and `stemCrossV` (+ = looser) |
 | `stemZ` | 0.0 | 0–3 | stem bottom Z |

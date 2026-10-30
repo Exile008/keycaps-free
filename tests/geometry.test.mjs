@@ -148,7 +148,8 @@ section('presets × rows × sizes: fillet, ribs and separate stem');
         validate(`${label} separate+ribs`, sepRibs, true);
         for (const [tag, s, ref] of [['separate', sep, joined], ['separate+ribs', sepRibs, joinedRibs]]) {
           const inter = s.capBody.intersect(s.stemPart);
-          approx(inter.volume(), 0, 1e-4, `${label} ${tag} cap ∩ stem = 0`);
+          // Same relative tolerance as the volume-sum check below (boolean slivers).
+          approx(inter.volume(), 0, Math.max(1e-4, ref.capBody.volume() * 1e-6), `${label} ${tag} cap ∩ stem = 0`);
           inter.delete();
           const sum = s.capBody.volume() + s.stemPart.volume();
           approx(sum, ref.capBody.volume(), Math.max(1e-4, ref.capBody.volume() * 1e-6),

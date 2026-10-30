@@ -35,10 +35,12 @@ export const DEFAULT_PARAMS = {
   topThickness: 1.5,
   // stem
   stemType: 'mx',
-  stemOuterD: 5.5,
-  stemCrossLen: 4.0,
-  stemCrossH: 1.25,
-  stemCrossV: 1.10,
+  // 110 % of the nominal MX sizes in X/Y (5.5 / 4.0 / 1.25 / 1.10): printed
+  // fit tested by the user (2026-10-30).
+  stemOuterD: 6.05,
+  stemCrossLen: 4.4,
+  stemCrossH: 1.375,
+  stemCrossV: 1.21,
   stemCrossDepth: 4.0,
   stemTolerance: 0,
   stemZ: 0.0,

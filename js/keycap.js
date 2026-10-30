@@ -762,7 +762,24 @@ export function buildKeycap(wasm, input, opts = {}) {
   let stemPart = null;
   let capBody = joinedCap;
   if (separate) {
-    const stemUnion = flare ? stems.add(flare) : stems.asOriginal();
+    let stemUnion = flare ? stems.add(flare) : stems.asOriginal();
+    // Rib portions within the flare radius go with the stem part: under the
+    // concave flare they would otherwise be cut off from the rest of the cap.
+    if (ribs && flare && p.stemType === 'mx') {
+      const { Manifold } = wasm;
+      const r = p.stemOuterD / 2 + p.stemFillet;
+      const len = p.height + 10;
+      const cyl = layout.stems.map(([sx, sy]) => Manifold.cylinder(len, r, r, q.circleSeg, true)
+        .translate([sx, sy, p.stemZ - 1 + len / 2]));
+      const zone = cyl.length === 1 ? cyl[0] : Manifold.union(cyl);
+      if (cyl.length > 1) cyl.forEach((c) => c.delete());
+      const near = ribs.intersect(zone);
+      zone.delete();
+      const next = stemUnion.add(near);
+      near.delete();
+      stemUnion.delete();
+      stemUnion = next;
+    }
     stemPart = stemUnion.intersect(inner);
     stemUnion.delete();
     // Exact set complement: volume(cap) + volume(stemPart) = joined exactly.

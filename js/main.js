@@ -23,8 +23,8 @@ const FALLBACK_DEFAULT_PARAMS = {
   rBottom: 0.6, rTop: 2.0,
   dishType: 'cylindrical', dishDepth: 0.8,
   wall: 1.5, topThickness: 1.5,
-  stemType: 'mx', stemOuterD: 5.5, stemCrossLen: 4.0, stemCrossH: 1.25,
-  stemCrossV: 1.10, stemCrossDepth: 4.0, stemTolerance: 0, stemZ: 0.0,
+  stemType: 'mx', stemOuterD: 6.05, stemCrossLen: 4.4, stemCrossH: 1.375,
+  stemCrossV: 1.21, stemCrossDepth: 4.0, stemTolerance: 0, stemZ: 0.0,
   stemFillet: 1.0, stemRibs: 'none', ribThickness: 1.0, ribHeight: 2.0,
   stemSeparate: false, stemColor: '#f2f2f2',
   stabilizers: 'auto', homingBump: false,
@@ -1777,7 +1777,13 @@ function restoreSession() {
     if (!raw) return;
     const obj = JSON.parse(raw);
     state.activePreset = validPreset(obj.activePreset);
-    if (obj.params) state.params = { ...DEFAULTS(), ...obj.params };
+    if (obj.params) {
+      // Stem dimensions without a UI control always come from the current
+      // defaults, so a default change is not pinned by an old session.
+      const params = { ...obj.params };
+      for (const k of ['stemOuterD', 'stemCrossLen', 'stemCrossH', 'stemCrossV']) delete params[k];
+      state.params = { ...DEFAULTS(), ...params };
+    }
     if (obj.legendSource && obj.legendSource.kind === 'text') {
       state.legendSource = obj.legendSource;
     }
